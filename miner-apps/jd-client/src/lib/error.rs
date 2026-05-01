@@ -58,13 +58,16 @@ pub struct Upstream;
 pub struct Downstream;
 
 #[derive(Debug)]
+pub struct JobDeclaratorClient;
+
+#[derive(Debug)]
 pub struct JDCError<Owner> {
     pub kind: JDCErrorKind,
     pub action: Action,
     _owner: PhantomData<Owner>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Log,
     Disconnect(DownstreamId),
@@ -84,12 +87,14 @@ impl CanDisconnect for ChannelManager {}
 impl CanFallback for Upstream {}
 impl CanFallback for JobDeclarator {}
 impl CanFallback for ChannelManager {}
+impl CanFallback for JobDeclaratorClient {}
 
 impl CanShutdown for ChannelManager {}
 impl CanShutdown for TemplateProvider {}
 impl CanShutdown for Downstream {}
 impl CanShutdown for Upstream {}
 impl CanShutdown for JobDeclarator {}
+impl CanShutdown for JobDeclaratorClient {}
 
 impl<O> JDCError<O> {
     pub fn log<E: Into<JDCErrorKind>>(kind: E) -> Self {
@@ -256,6 +261,10 @@ pub enum JDCErrorKind {
     InvalidKey,
     /// Upstream not found
     UpstreamNotFound,
+    /// JDC initialization error with details
+    InitializationError(String),
+    /// No upstream is available after all attempts have failed, fallback to solo mining.
+    NoUpstreamAvailable,
 }
 
 impl std::error::Error for JDCErrorKind {}
@@ -395,6 +404,12 @@ impl fmt::Display for JDCErrorKind {
             CouldNotInitiateSystem => write!(f, "Could not initiate subsystem"),
             InvalidKey => write!(f, "Invalid key used during noise handshake"),
             UpstreamNotFound => write!(f, "Upstream not found"),
+            InitializationError(ref err) => {
+                write!(f, "Cannot initialize JD client: {err:?}")
+            }
+            NoUpstreamAvailable => {
+                write!(f, "No upstream is available after all attempts have failed")
+            }
         }
     }
 }

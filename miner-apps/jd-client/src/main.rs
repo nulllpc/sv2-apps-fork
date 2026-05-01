@@ -25,5 +25,8 @@ async fn inner_main() {
     });
 
     init_logging(jdc_config.log_file());
-    JobDeclaratorClient::new(jdc_config).start().await;
+    if let Err(e) = JobDeclaratorClient::new(jdc_config).start().await {
+        tracing::error!("Job Declarator Client failed to start: {e}");
+        std::process::exit(1);
+    };
 }

@@ -274,7 +274,11 @@ pub fn start_jdc(
     );
     let ret = jd_client_sv2::JobDeclaratorClient::new(jd_client_proxy);
     let ret_clone = ret.clone();
-    tokio::spawn(async move { ret_clone.start().await });
+    tokio::spawn(async move {
+        if let Err(e) = ret_clone.start().await {
+            panic!("JDC failed to start: {e}");
+        }
+    });
     (ret, jdc_address, monitoring_address)
 }
 
