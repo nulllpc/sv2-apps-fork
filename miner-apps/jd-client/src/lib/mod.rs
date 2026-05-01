@@ -22,7 +22,7 @@ use tracing::{debug, error, info, warn};
 use crate::{
     channel_manager::ChannelManager,
     config::JobDeclaratorClientConfig,
-    error::JDCErrorKind,
+    error::{Action, JDCError, JDCErrorKind, JDCResult},
     jd_mode::JDMode,
     job_declarator::JobDeclarator,
     template_receiver::{
@@ -68,7 +68,7 @@ impl JobDeclaratorClient {
     }
 
     /// Starts the Job Declarator Client (JDC) main loop.
-    pub async fn start(&self) {
+    pub async fn start(&self) -> JDCResult<(), error::JobDeclaratorClient> {
         info!(
             "Job declarator client starting... setting up subsystems, User Identity: {}",
             self.config.user_identity()
@@ -77,17 +77,21 @@ impl JobDeclaratorClient {
         let miner_coinbase_outputs = vec![self.config.get_txout()];
         let mut encoded_outputs = vec![];
         let mode = JDMode::new(self.config.mode);
+        let task_manager = Arc::new(TaskManager::new());
 
-        if let Err(e) = miner_coinbase_outputs.consensus_encode(&mut encoded_outputs) {
-            error!(error = ?e, "Invalid coinbase output in config");
+        if miner_coinbase_outputs
+            .consensus_encode(&mut encoded_outputs)
+            .is_err()
+        {
             self.cancellation_token.cancel();
-            self.shutdown_notify.notify_waiters();
-            self.is_alive.store(false, Ordering::Relaxed);
-            return;
+            self.graceful_shutdown(task_manager).await;
+
+            return Err(JDCError::shutdown(JDCErrorKind::InitializationError(
+                "Invalid coinbase output in config".to_string(),
+            )));
         }
 
         let mut fallback_coordinator = FallbackCoordinator::new();
-        let task_manager = Arc::new(TaskManager::new());
 
         let (channel_manager_to_upstream_sender, channel_manager_to_upstream_receiver) =
             unbounded();
@@ -123,11 +127,10 @@ impl JobDeclaratorClient {
         {
             Ok(channel_manager) => channel_manager,
             Err(e) => {
-                error!(error = ?e, "Failed to initialize channel manager");
                 self.cancellation_token.cancel();
-                self.shutdown_notify.notify_waiters();
-                self.is_alive.store(false, Ordering::Relaxed);
-                return;
+                self.graceful_shutdown(task_manager).await;
+
+                return Err(JDCError::shutdown(e.kind));
             }
         };
 
@@ -213,9 +216,9 @@ impl JobDeclaratorClient {
                     Err(e) => {
                         error!(error = ?e, "Failed to initialize SV2 template receiver");
                         self.cancellation_token.cancel();
-                        self.shutdown_notify.notify_waiters();
-                        self.is_alive.store(false, Ordering::Relaxed);
-                        return;
+                        self.graceful_shutdown(task_manager).await;
+
+                        return Err(JDCError::shutdown(e.kind));
                     }
                 };
 
@@ -228,9 +231,9 @@ impl JobDeclaratorClient {
                 {
                     error!(error = ?e, "Failed to start SV2 template receiver");
                     self.cancellation_token.cancel();
-                    self.shutdown_notify.notify_waiters();
-                    self.is_alive.store(false, Ordering::Relaxed);
-                    return;
+                    self.graceful_shutdown(task_manager).await;
+
+                    return Err(JDCError::shutdown(e.kind));
                 }
 
                 info!("Sv2 Template Provider setup done");
@@ -246,13 +249,10 @@ impl JobDeclaratorClient {
                 ) {
                     Some(unix_socket_path) => unix_socket_path,
                     None => {
-                        error!(
-                                "Could not determine Bitcoin data directory. Please set data_dir in config."
-                            );
                         self.cancellation_token.cancel();
-                        self.shutdown_notify.notify_waiters();
-                        self.is_alive.store(false, Ordering::Relaxed);
-                        return;
+                        self.graceful_shutdown(task_manager).await;
+
+                        return Err(JDCError::shutdown(JDCErrorKind::InitializationError("Could not determine Bitcoin data directory. Please set data_dir in config.".to_string())));
                     }
                 };
 
@@ -367,8 +367,17 @@ impl JobDeclaratorClient {
                     _ = initial_channel_manager.allocate_tokens(2).await;
                 }
                 Err(e) => {
-                    tracing::error!("Failed to initialize upstream: {:?}", e);
+                    error!("Failed to initialize upstream: {:?}", e);
+
+                    if e.action == Action::Shutdown {
+                        self.cancellation_token.cancel();
+                        self.graceful_shutdown(task_manager).await;
+
+                        return Err(e);
+                    }
+
                     mode.set_solo_mining();
+                    info!("Fallback to solo mining mode");
                 }
             };
         }
@@ -511,7 +520,14 @@ impl JobDeclaratorClient {
                             _ = channel_manager.allocate_tokens(2).await;
                         }
                         Err(e) => {
-                            tracing::error!("Failed to initialize upstream: {:?}", e);
+                            error!("Failed to initialize upstream: {:?}", e);
+
+                            if e.action == Action::Shutdown {
+                                info!("Shutdown requested while initializing upstream during fallback, initiate graceful shutdown");
+                                self.cancellation_token.cancel();
+                                break;
+                            }
+
                             channel_manager
                                 .upstream_state
                                 .set(UpstreamState::SoloMining);
@@ -626,6 +642,12 @@ impl JobDeclaratorClient {
             }
         }
 
+        self.graceful_shutdown(task_manager).await;
+
+        Ok(())
+    }
+
+    async fn graceful_shutdown(&self, task_manager: Arc<TaskManager>) {
         warn!(
             "Graceful shutdown: waiting {} seconds for tasks to finish",
             GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS
@@ -679,7 +701,7 @@ impl JobDeclaratorClient {
         fallback_coordinator: FallbackCoordinator,
         mode: JDMode,
         task_manager: Arc<TaskManager>,
-    ) -> Result<(Upstream, JobDeclarator), JDCErrorKind> {
+    ) -> JDCResult<(Upstream, JobDeclarator), error::JobDeclaratorClient> {
         const MAX_RETRIES: usize = 3;
         let upstream_len = upstreams.len();
         for (i, upstream_entry) in upstreams.iter_mut().enumerate() {
@@ -697,7 +719,9 @@ impl JobDeclaratorClient {
                 biased;
                 _ = cancellation_token.cancelled() => {
                     info!("Shutdown requested while waiting to initialize upstream, aborting retries");
-                    return Err(JDCErrorKind::CouldNotInitiateSystem);
+                    return Err(
+                        JDCError::shutdown(JDCErrorKind::CouldNotInitiateSystem)
+                    );
                 }
                 _ = tokio::time::sleep(Duration::from_secs(1)) => {}
             }
@@ -714,7 +738,7 @@ impl JobDeclaratorClient {
                     info!(
                         "Shutdown requested before upstream connection attempt, aborting retries"
                     );
-                    return Err(JDCErrorKind::CouldNotInitiateSystem);
+                    return Err(JDCError::shutdown(JDCErrorKind::CouldNotInitiateSystem));
                 }
 
                 info!("Connection attempt {}/{}...", attempt, MAX_RETRIES);
@@ -744,9 +768,18 @@ impl JobDeclaratorClient {
                             biased;
                             _ = cancellation_token.cancelled() => {
                                 info!("Shutdown requested after upstream initialization failure, aborting retries");
-                                return Err(JDCErrorKind::CouldNotInitiateSystem);
+                                return Err(
+                                    JDCError::shutdown(JDCErrorKind::CouldNotInitiateSystem)
+                                );
                             }
                             _ = tokio::time::sleep(Duration::from_secs(1)) => {}
+                        }
+
+                        // Stop retrying and fail immediately if a shutdown signal is encountered,
+                        // as retries are only intended for fallback scenarios.
+                        if e.action == Action::Shutdown {
+                            info!("Encountered a shutdown error during upstream initialization, aborting retries");
+                            return Err(e);
                         }
 
                         warn!(
@@ -775,7 +808,7 @@ impl JobDeclaratorClient {
         }
 
         tracing::error!("All upstreams failed after {} retries each", MAX_RETRIES);
-        Err(JDCErrorKind::CouldNotInitiateSystem)
+        Err(JDCError::fallback(JDCErrorKind::NoUpstreamAvailable))
     }
 }
 
@@ -793,7 +826,7 @@ async fn try_initialize_single(
     mode: JDMode,
     task_manager: Arc<TaskManager>,
     config: &JobDeclaratorClientConfig,
-) -> Result<(Upstream, JobDeclarator), JDCErrorKind> {
+) -> JDCResult<(Upstream, JobDeclarator), error::JobDeclaratorClient> {
     info!("Upstream connection in-progress at initialize single");
     let upstream = Upstream::new(
         upstream_entry,
@@ -805,7 +838,10 @@ async fn try_initialize_single(
         config.required_extensions().to_vec(),
     )
     .await
-    .map_err(|error| error.kind)?;
+    .map_err(|error| match error.action {
+        Action::Shutdown => JDCError::shutdown(error.kind),
+        _ => JDCError::fallback(error.kind),
+    })?;
 
     info!("Upstream connection done at initialize single");
 
@@ -819,7 +855,10 @@ async fn try_initialize_single(
         task_manager.clone(),
     )
     .await
-    .map_err(|error| error.kind)?;
+    .map_err(|error| match error.action {
+        Action::Shutdown => JDCError::shutdown(error.kind),
+        _ => JDCError::fallback(error.kind),
+    })?;
 
     Ok((upstream, job_declarator))
 }
