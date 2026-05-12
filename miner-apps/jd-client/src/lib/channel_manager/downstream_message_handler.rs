@@ -797,7 +797,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                                     _ => "internal-error",
                                 };
                                     if err_code == "internal-error" {
-                                        warn!("Failed to update extended channel {channel_id}");
+                                        warn!("Failed to update standard channel {channel_id}");
                                     } else {
                                         return vec![(downstream_id, build_error(err_code)).into()];
                                     }
@@ -827,7 +827,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                                 let new_target = extended_channel.get_target();
 
                                 if let Err(e) = update_channel {
-                                    error!(channel_id, ?e, "StandardChannel update failed");
+                                    error!(channel_id, ?e, "ExtendedChannel update failed");
                                     let err_code = match e {
                                     ExtendedChannelError::UpdateChannelInvalidNominalHashrate(
                                         code,
