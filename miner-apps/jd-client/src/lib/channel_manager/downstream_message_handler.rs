@@ -816,10 +816,6 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                             } else if let Some(extended_channel) =
                                 data.extended_channels.get_mut(&channel_id)
                             {
-                                if data.require_std_job {
-                                    return vec![(downstream_id, build_error("invalid-channel-id")).into()];
-                                }
-
                                 let update_channel = extended_channel.update_channel(
                                     new_nominal_hash_rate,
                                     Some(requested_maximum_target),
@@ -1220,10 +1216,6 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                 return Err(JDCError::disconnect(JDCErrorKind::LastNewPrevhashNotFound, downstream_id));
             };
             downstream.downstream_data.super_safe_lock(|data| {
-                if data.require_std_job {
-                    return Ok(vec![(downstream_id, build_error("invalid-channel-id")).into()]);
-                }
-
                 let mut messages: Vec<RouteMessageTo> = vec![];
 
                 let Some(extended_channel) = data.extended_channels.get_mut(&channel_id) else {

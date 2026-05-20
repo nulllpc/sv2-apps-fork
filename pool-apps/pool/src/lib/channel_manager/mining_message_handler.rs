@@ -287,6 +287,24 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                 else {
                     return Err(PoolError::disconnect(PoolErrorKind::DownstreamIdNotFound, downstream_id));
                 };
+
+                if downstream.requires_standard_jobs.load(Ordering::SeqCst) {
+                    let open_extended_mining_channel_error = OpenMiningChannelError {
+                        request_id,
+                        error_code: "extended-channels-not-supported-for-standard-jobs"
+                            .to_string()
+                            .try_into()
+                            .expect("error code must be valid string"),
+                    };
+                    return Ok(vec![(
+                        downstream_id,
+                        Mining::OpenMiningChannelError(
+                            open_extended_mining_channel_error,
+                        ),
+                    )
+                        .into()]);
+                }
+
                 downstream
                     .downstream_data
                     .super_safe_lock(|downstream_data| {
