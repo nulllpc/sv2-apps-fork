@@ -10,11 +10,22 @@ A Rust library that integrates [Bitcoin Core](https://bitcoin.org/en/bitcoin-cor
 
 The crate exposes three module families:
 
-- `bitcoin_core_sv2::common` - version-agnostic enum-dispatch runtime handles and factories based only on Sv2 protocol IO primitives.
+- `bitcoin_core_sv2::common` - version-agnostic enum-dispatch runtime handles and protocol-specific `new(version, ...)` factories.
 - `bitcoin_core_sv2::unix_capnp::v30x` - Bitcoin Core v30.x IPC implementation.
 - `bitcoin_core_sv2::unix_capnp::v31x` - Bitcoin Core v31.x IPC implementation.
 
-Downstream applications should integrate through `bitcoin_core_sv2::common` and choose the Bitcoin Core major version at runtime.
+### Flavor naming rationale
+
+`unix_capnp` is intentionally explicit: it identifies the current backend flavor as
+UNIX-socket Cap'n Proto IPC.
+
+This leaves room for future backend families without overloading the current namespace, for
+example:
+
+- `bitcoin_core_sv2::tcp_capnp` (theoretical/future)
+- `bitcoin_core_sv2::http_json_rpc` (theoretical/future)
+
+Downstream applications should integrate through `bitcoin_core_sv2::common`, choose the Bitcoin Core major version at runtime, and build runtimes via `template_distribution_protocol::new` / `job_declaration_protocol::new`.
 
 ## Requirements
 

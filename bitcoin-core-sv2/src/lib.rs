@@ -15,10 +15,16 @@
 //!
 //! ## Module layout
 //!
-//! - [`common`] exposes version-agnostic runtime handles and factories based on Sv2 IO primitives,
-//!   with enum dispatch across backend versions.
+//! - [`common`] exposes version-agnostic runtime handles and protocol-specific `new(version, ...)`
+//!   factories with enum dispatch across backend versions.
 //! - [`unix_capnp::v30x`] contains the Bitcoin Core v30.x IPC implementation.
 //! - [`unix_capnp::v31x`] contains the Bitcoin Core v31.x IPC implementation.
+//!
+//! ## Flavor direction
+//!
+//! `unix_capnp` is the currently implemented backend flavor. The crate keeps this flavor name
+//! explicit to leave room for additional backend families in the future (for example, a
+//! `tcp_capnp` flavor or an `http_json_rpc` flavor).
 //!
 //! Downstream applications should integrate through [`common`] and choose a
 //! [`common::BitcoinCoreVersion`] at runtime.
