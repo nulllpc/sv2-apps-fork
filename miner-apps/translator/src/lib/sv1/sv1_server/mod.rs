@@ -1,3 +1,20 @@
+//! ## SV1 Server Module
+//!
+//! This module implements the SV1 server component of the translator,
+//! responsible for managing connections with SV1 mining clients.
+//!
+//! It handles the full lifecycle of SV1 miner interactions, including:
+//! - Accepting new SV1 miner connections.
+//! - Managing difficulty adjustment for connected miners, including variable difficulty (Vardiff)
+//!   logic.
+//! - Coordinating with the SV2 channel manager for upstream communication, translating SV1 messages
+//!   to SV2 and vice-versa.
+//! - Tracking mining jobs, share submissions, and managing keepalive mechanisms.
+//!
+//! The core component is the [`Sv1Server`] struct, which orchestrates these operations,
+//! maintaining state for multiple downstream connections and ensuring seamless translation
+//! between SV1 and SV2 protocols.
+
 mod difficulty_manager;
 pub mod downstream_message_handler;
 

@@ -10,7 +10,7 @@ use tokio::sync::oneshot;
 ///
 /// This lets callers distinguish stale-tip races from other validation failures.
 ///
-/// Please check https://github.com/stratum-mining/sv2-apps/issues/364
+/// Please check <https://github.com/stratum-mining/sv2-apps/issues/364>
 /// for more details on the regression that motivated this field.
 #[derive(Debug, Clone, Copy)]
 pub struct ValidationContext {

@@ -8,7 +8,7 @@ use stratum_core::bitcoin::{
 
 use bitcoin_capnp_types_v31::capnp;
 
-/// Error type for [`crate::BitcoinCoreSv2TDP`]
+/// Error type for [`super::BitcoinCoreSv2TDP`]
 #[derive(Debug)]
 pub enum BitcoinCoreSv2TDPError {
     CapnpError(capnp::Error),

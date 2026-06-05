@@ -29,7 +29,7 @@
 //!
 //! - [`network_helpers`] - High-level networking utilities for SV2 connections
 //! - [`config_helpers`] - Configuration management and parsing utilities
-//! - [`payout`] - Payout-mode parsing and coinbase-output construction/verification helpers
+//! - \[`payout`\] - Payout-mode parsing and coinbase-output construction/verification helpers
 
 /// Re-export all the modules from `stratum_core`
 #[cfg(feature = "core")]

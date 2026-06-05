@@ -18,7 +18,7 @@ impl fmt::Display for MessageDirection {
     }
 }
 
-/// Represents an action that [`Sniffer`] can take on intercepted messages.
+/// Represents an action that [`crate::sniffer::Sniffer`] can take on intercepted messages.
 #[derive(Debug, Clone)]
 pub enum InterceptAction {
     /// Prevents a message from being forwarded and stored into the message aggregator.
@@ -82,7 +82,7 @@ impl From<IgnoreMessage> for InterceptAction {
     }
 }
 
-/// Allows [`Sniffer`] to replace some intercepted message before forwarding it.
+/// Allows [`crate::sniffer::Sniffer`] to replace some intercepted message before forwarding it.
 #[derive(Debug, Clone)]
 pub struct ReplaceMessage {
     direction: MessageDirection,
