@@ -22,14 +22,7 @@ use stratum_apps::{
             client::extended::ExtendedChannel,
             extranonce_manager::{bytes_needed, ExtranonceAllocator},
             outputs::deserialize_outputs,
-            server::{
-                group::GroupChannel,
-                jobs::{
-                    extended::ExtendedJob, factory::JobFactory, job_store::DefaultJobStore,
-                    standard::StandardJob,
-                },
-                standard::StandardChannel,
-            },
+            server::{group::GroupChannel, jobs::factory::JobFactory, standard::StandardChannel},
             Vardiff, VardiffState,
         },
         framing_sv2,
@@ -459,10 +452,7 @@ impl ChannelManager {
     // Returns a `GroupChannel` if successful, otherwise returns `None`.
     //
     // To be called before calling Downstream::new.
-    fn bootstrap_group_channel(
-        &self,
-        channel_id: ChannelId,
-    ) -> Option<GroupChannel<'static, DefaultJobStore<ExtendedJob<'static>>>> {
+    fn bootstrap_group_channel(&self, channel_id: ChannelId) -> Option<GroupChannel<'static>> {
         let (full_extranonce_size, pool_tag_string, last_future_template, last_new_prev_hash) =
             self.channel_manager_data.super_safe_lock(|data| {
                 (
@@ -487,7 +477,6 @@ impl ChannelManager {
         let miner_tag_string = self.miner_tag_string.clone();
         let mut group_channel = match GroupChannel::new_for_job_declaration_client(
             channel_id,
-            DefaultJobStore::new(),
             full_extranonce_size,
             pool_tag_string.clone(),
             miner_tag_string.clone(),
@@ -1172,10 +1161,7 @@ impl ChannelManager {
     fn run_vardiff_on_extended_channel(
         downstream_id: DownstreamId,
         channel_id: ChannelId,
-        channel_state: &mut stratum_apps::stratum_core::channels_sv2::server::extended::ExtendedChannel<
-            'static,
-            DefaultJobStore<ExtendedJob<'static>>,
-        >,
+        channel_state: &mut stratum_apps::stratum_core::channels_sv2::server::extended::ExtendedChannel<'static>,
         vardiff_state: &mut VardiffState,
         updates: &mut Vec<RouteMessageTo>,
     ) {
@@ -1223,7 +1209,7 @@ impl ChannelManager {
     fn run_vardiff_on_standard_channel(
         downstream_id: DownstreamId,
         channel_id: ChannelId,
-        channel: &mut StandardChannel<'static, DefaultJobStore<StandardJob<'static>>>,
+        channel: &mut StandardChannel<'static>,
         vardiff_state: &mut VardiffState,
         updates: &mut Vec<RouteMessageTo>,
     ) {

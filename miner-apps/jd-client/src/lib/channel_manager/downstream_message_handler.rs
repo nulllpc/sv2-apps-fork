@@ -10,7 +10,6 @@ use stratum_apps::{
             server::{
                 error::{ExtendedChannelError, StandardChannelError},
                 extended::ExtendedChannel,
-                jobs::job_store::DefaultJobStore,
                 share_accounting::{ShareValidationError, ShareValidationResult},
                 standard::StandardChannel,
             },
@@ -314,7 +313,6 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                             }
                         };
 
-                        let job_store = DefaultJobStore::new();
                         let mut standard_channel =
                             match StandardChannel::new_for_job_declaration_client(
                                 standard_channel_id,
@@ -324,7 +322,6 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                                 nominal_hash_rate,
                                 self.share_batch_size,
                                 self.shares_per_minute,
-                                job_store,
                                 channel_manager_data.pool_tag_string.clone(),
                                 self.miner_tag_string.clone(),
                             ) {
@@ -557,7 +554,6 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                                     .into()]);
                             }
                         };
-                        let job_store = DefaultJobStore::new();
 
                         let full_extranonce_size = channel_manager_data
                             .upstream_channel
@@ -581,7 +577,6 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                                 rollable_extranonce_size as u16,
                                 self.share_batch_size,
                                 self.shares_per_minute,
-                                job_store,
                                 channel_manager_data.pool_tag_string.clone(),
                                 self.miner_tag_string.clone(),
                             ) {
