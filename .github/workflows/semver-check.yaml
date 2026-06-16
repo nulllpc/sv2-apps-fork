@@ -41,8 +41,18 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake
 
+      # Install cargo-binstall so tool installs below use prebuilt binaries.
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@v1.20.0
+        with:
+          version: "1.20.0"
+
+      # Install cargo-semver-checks via cargo-binstall (no source build).
+      # Keep quick-install disabled to only use upstream release artifacts.
       - name: Install cargo-semver-checks
-        run: cargo install cargo-semver-checks --version 0.44.0 --locked
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: cargo binstall --no-confirm --disable-telemetry --disable-strategies quick-install --locked cargo-semver-checks@0.44.0
 
       - name: Run semver checks for bitcoin-core-sv2
         working-directory: bitcoin-core-sv2
