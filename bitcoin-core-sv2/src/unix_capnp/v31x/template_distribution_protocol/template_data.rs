@@ -22,6 +22,7 @@ use stratum_core::{
         NewTemplate, RequestTransactionDataSuccess, SetNewPrevHash, SubmitSolution,
     },
 };
+use tracing::{debug, error, info};
 
 #[derive(Clone)]
 pub struct TemplateData {
@@ -58,7 +59,7 @@ impl TemplateData {
         &self,
         thread_ipc_client: ThreadIpcClient,
     ) -> Result<(), TemplateDataError> {
-        tracing::debug!("Destroying template IPC client: {}", self.template_id);
+        debug!("Destroying template IPC client: {}", self.template_id);
         let mut destroy_ipc_client_request = self.template_ipc_client.destroy_request();
         let destroy_ipc_client_request_params = destroy_ipc_client_request.get();
 
@@ -138,7 +139,7 @@ impl TemplateData {
         let self_clone = self.clone();
         let path_dir = path_dir.to_path_buf();
         tokio::task::spawn_local(async move {
-            tracing::debug!("Creating a dedicated thread IPC client for getBlock request");
+            debug!("Creating a dedicated thread IPC client for getBlock request");
 
             // validate the solution
             let solution_header = {
@@ -152,9 +153,7 @@ impl TemplateData {
                     || solution_coinbase_tx.input[0].previous_output
                         != self_clone.coinbase_tx.input[0].previous_output
                 {
-                    tracing::error!(
-                        "Solution coinbase tx is not congruent with original coinbase tx"
-                    );
+                    error!("Solution coinbase tx is not congruent with original coinbase tx");
                     return;
                 }
 
@@ -181,7 +180,7 @@ impl TemplateData {
                 };
 
                 if let Err(e) = solution_header.validate_pow(solution_header.target()) {
-                    tracing::error!("Solution header is not valid: {}", e);
+                    error!("Solution header is not valid: {}", e);
                     return;
                 }
 
@@ -233,7 +232,7 @@ impl TemplateData {
                 File::create(&solution_block_path).expect("Failed to create solution block file");
             file.write_all(&solution_block_bytes)
                 .expect("Failed to write solution block to file");
-            tracing::info!(
+            info!(
                 "Solution block dumped to: {}",
                 solution_block_path.display()
             );
@@ -251,7 +250,7 @@ impl TemplateData {
 
         let solution_coinbase_tx: Transaction =
             deserialize(&solution_coinbase_tx_bytes).map_err(|e| {
-                tracing::error!("SubmitSolution.coinbase_tx is invalid: {}", e);
+                error!("SubmitSolution.coinbase_tx is invalid: {}", e);
                 TemplateDataError::InvalidCoinbaseTx(e)
             })?;
 
@@ -356,7 +355,7 @@ impl TemplateData {
         &self,
         thread_map: ThreadMapIpcClient,
     ) -> Result<Seq064K<'_, B016M<'static>>, TemplateDataError> {
-        tracing::debug!("Creating a dedicated thread IPC client for get_tx_data");
+        debug!("Creating a dedicated thread IPC client for get_tx_data");
         let thread_ipc_client_request = thread_map.make_thread_request();
         let thread_ipc_client_response = thread_ipc_client_request.send().promise.await?;
         let thread_ipc_client = thread_ipc_client_response.get()?.get_result()?;
@@ -371,12 +370,12 @@ impl TemplateData {
         let template_block_bytes = template_block_response.get()?.get_result()?;
 
         // Deserialize the complete block template from Bitcoin Core's serialization format
-        tracing::debug!(
+        debug!(
             "Deserializing block template ({} bytes)",
             template_block_bytes.len()
         );
         let block: Block = deserialize(template_block_bytes)?;
-        tracing::debug!(
+        debug!(
             "Block deserialized - prev_hash from header: {:?}",
             block.header.prev_blockhash
         );

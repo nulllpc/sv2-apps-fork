@@ -4,6 +4,7 @@
 use crate::unix_capnp::v30x::job_declaration_protocol::BitcoinCoreSv2JDP;
 use bitcoin_capnp_types_v30::capnp;
 use tokio::task::JoinHandle;
+use tracing::{debug, error, warn};
 
 impl BitcoinCoreSv2JDP {
     /// Spawns a `spawn_local` task that issues `waitNext` requests to Bitcoin Core and
@@ -13,8 +14,8 @@ impl BitcoinCoreSv2JDP {
         let self_clone = self.clone();
 
         tokio::task::spawn_local(async move {
-            tracing::debug!("monitor_mempool_mirror() task started");
-            tracing::debug!("monitor_mempool_mirror() entering main loop");
+            debug!("monitor_mempool_mirror() task started");
+            debug!("monitor_mempool_mirror() entering main loop");
 
             loop {
                 // Create a new waitNext request for each iteration
@@ -26,7 +27,7 @@ impl BitcoinCoreSv2JDP {
                 match wait_next_request.get().get_context() {
                     Ok(mut context) => context.set_thread(self_clone.thread_ipc_client.clone()),
                     Err(e) => {
-                        tracing::error!("Failed to set thread: {}", e);
+                        error!("Failed to set thread: {}", e);
                         self_clone.cancellation_token.cancel();
                         break;
                     }
@@ -35,7 +36,7 @@ impl BitcoinCoreSv2JDP {
                 let mut wait_next_request_options = match wait_next_request.get().get_options() {
                     Ok(options) => options,
                     Err(e) => {
-                        tracing::error!("Failed to get waitNext request options: {}", e);
+                        error!("Failed to get waitNext request options: {}", e);
                         self_clone.cancellation_token.cancel();
                         break;
                     }
@@ -51,12 +52,12 @@ impl BitcoinCoreSv2JDP {
 
                 tokio::select! {
                     _ = self_clone.cancellation_token.cancelled() => {
-                        tracing::debug!("Interrupting waitNext request");
+                        debug!("Interrupting waitNext request");
                         if let Err(e) = self_clone.interrupt_wait_request().await {
-                            tracing::error!("Failed to interrupt waitNext request: {:?}", e);
+                            error!("Failed to interrupt waitNext request: {:?}", e);
                         }
-                        tracing::warn!("Exiting mempool mirror loop");
-                        tracing::debug!("monitor_mempool_mirror() exiting due to cancellation");
+                        warn!("Exiting mempool mirror loop");
+                        debug!("monitor_mempool_mirror() exiting due to cancellation");
                         break;
                     }
                     wait_next_request_response = wait_next_request.send().promise => {
@@ -65,8 +66,8 @@ impl BitcoinCoreSv2JDP {
                                 let result = match response.get() {
                                     Ok(result) => result,
                                     Err(e) => {
-                                        tracing::error!("Failed to get response: {}", e);
-                                        tracing::warn!("Terminating Sv2 Bitcoin Core IPC Connection");
+                                        error!("Failed to get response: {}", e);
+                                        warn!("Terminating Sv2 Bitcoin Core IPC Connection");
                                         self_clone.cancellation_token.cancel();
                                         break;
                                     }
@@ -74,19 +75,19 @@ impl BitcoinCoreSv2JDP {
 
                                 let new_template_ipc_client = match result.get_result() {
                                     Ok(new_template_ipc_client) => {
-                                        tracing::debug!("waitNext returned new template IPC client");
+                                        debug!("waitNext returned new template IPC client");
                                         new_template_ipc_client
                                     },
                                     Err(e) => {
                                         match e.kind {
                                             capnp::ErrorKind::MessageContainsNullCapabilityPointer => {
-                                                tracing::debug!("waitNext timed out (no mempool changes)");
-                                                tracing::debug!("Continuing to next waitNext iteration");
+                                                debug!("waitNext timed out (no mempool changes)");
+                                                debug!("Continuing to next waitNext iteration");
                                                 continue;
                                             }
                                             _ => {
-                                                tracing::error!("Failed to get new template IPC client: {}", e);
-                                                tracing::warn!("Terminating Sv2 Bitcoin Core IPC Connection");
+                                                error!("Failed to get new template IPC client: {}", e);
+                                                warn!("Terminating Sv2 Bitcoin Core IPC Connection");
                                                 self_clone.cancellation_token.cancel();
                                                 break;
                                             }
@@ -98,20 +99,20 @@ impl BitcoinCoreSv2JDP {
                                 {
                                     let mut current_template_ipc_client_guard = self_clone.current_template_ipc_client.borrow_mut();
                                     *current_template_ipc_client_guard = new_template_ipc_client;
-                                    tracing::debug!("Updated current_template_ipc_client with new template");
+                                    debug!("Updated current_template_ipc_client with new template");
                                 }
 
                                 // update the mempool mirror
                                 if let Err(e) = self_clone.update_mempool_mirror().await {
                                     if e.is_thread_busy() {
-                                        tracing::warn!(
+                                        warn!(
                                             error = ?e,
                                             "Transient IPC contention while updating mempool mirror (thread busy); retrying"
                                         );
                                         continue;
                                     }
 
-                                    tracing::error!("Failed to update mempool mirror: {:?}", e);
+                                    error!("Failed to update mempool mirror: {:?}", e);
                                     self_clone.cancellation_token.cancel();
                                     break;
                                 }
@@ -119,15 +120,15 @@ impl BitcoinCoreSv2JDP {
                             Err(e) => {
                                 let err: super::error::BitcoinCoreSv2JDPError = e.into();
                                 if err.is_thread_busy() {
-                                    tracing::warn!(
+                                    warn!(
                                         error = ?err,
                                         "Transient IPC contention during waitNext (thread busy); retrying"
                                     );
                                     continue;
                                 }
-                                tracing::debug!("waitNext request failed with error: {:?}", err);
-                                tracing::error!("Failed to get response: {:?}", err);
-                                tracing::warn!("Terminating Sv2 Bitcoin Core IPC Connection");
+                                debug!("waitNext request failed with error: {:?}", err);
+                                error!("Failed to get response: {:?}", err);
+                                warn!("Terminating Sv2 Bitcoin Core IPC Connection");
                                 self_clone.cancellation_token.cancel();
                                 break;
                             }
@@ -135,7 +136,7 @@ impl BitcoinCoreSv2JDP {
                     }
                 }
             }
-            tracing::debug!("monitor_mempool_mirror() task exiting");
+            debug!("monitor_mempool_mirror() task exiting");
         })
     }
 }

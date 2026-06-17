@@ -19,6 +19,7 @@ use stratum_core::{
     },
 };
 use tokio::sync::oneshot;
+use tracing::{debug, error, info, warn};
 
 impl BitcoinCoreSv2JDP {
     /// Validates a declared mining job by checking transaction availability and block structure.
@@ -35,14 +36,14 @@ impl BitcoinCoreSv2JDP {
         missing_txs: Vec<Transaction>,
         response_tx: oneshot::Sender<JdResponse>,
     ) {
-        tracing::info!(
+        info!(
             "Validating DeclareMiningJob - version: {:?}, coinbase inputs: {}, outputs: {}, locktime: {}",
             version,
             coinbase_tx.input.len(),
             coinbase_tx.output.len(),
             coinbase_tx.lock_time.to_consensus_u32()
         );
-        tracing::debug!(
+        debug!(
             "Declared coinbase scriptSig: {:?}",
             coinbase_tx.input[0].script_sig
         );
@@ -99,7 +100,7 @@ impl BitcoinCoreSv2JDP {
 
             let txdata = mempool_mirror.get_txdata(&wtxid_list);
 
-            tracing::info!(
+            info!(
                 "Using prevhash: {:?}, nbits: {:?}, min_ntime: {}, bip34_height: {} from mempool mirror",
                 initial_validation_context.prev_hash,
                 initial_validation_context.nbits,
@@ -139,7 +140,7 @@ impl BitcoinCoreSv2JDP {
 
             let block_bytes: Vec<u8> = serialize(&block);
 
-            tracing::debug!(
+            debug!(
                 "Assembled block for checkBlock: {} bytes, {} transactions",
                 block_bytes.len(),
                 num_transactions
@@ -150,14 +151,14 @@ impl BitcoinCoreSv2JDP {
             match check_block_request.get().get_context() {
                 Ok(mut context) => context.set_thread(self.thread_ipc_client.clone()),
                 Err(e) => {
-                    tracing::error!("Failed to set check block request thread context: {e}");
+                    error!("Failed to set check block request thread context: {e}");
                     // send error response to the client
                     // deliberately ignore potential send errors
                     let _ = response_tx.send(JdResponse::Error {
                         error_code: ERROR_CODE_DECLARE_MINING_JOB_INTERNAL_ERROR,
                         validation_context: initial_validation_context,
                     });
-                    tracing::warn!("Terminating Sv2 Bitcoin Core IPC Connection");
+                    warn!("Terminating Sv2 Bitcoin Core IPC Connection");
                     self.cancellation_token.cancel();
                     return;
                 }
@@ -168,14 +169,14 @@ impl BitcoinCoreSv2JDP {
             let mut options = match check_block_request.get().get_options() {
                 Ok(options) => options,
                 Err(e) => {
-                    tracing::error!("Failed to get check block options: {e}");
+                    error!("Failed to get check block options: {e}");
                     // send error response to the client
                     // deliberately ignore potential send errors
                     let _ = response_tx.send(JdResponse::Error {
                         error_code: ERROR_CODE_DECLARE_MINING_JOB_INTERNAL_ERROR,
                         validation_context: initial_validation_context,
                     });
-                    tracing::warn!("Terminating Sv2 Bitcoin Core IPC Connection");
+                    warn!("Terminating Sv2 Bitcoin Core IPC Connection");
                     self.cancellation_token.cancel();
                     return;
                 }
@@ -186,14 +187,14 @@ impl BitcoinCoreSv2JDP {
             let check_block_response = match check_block_request.send().promise.await {
                 Ok(response) => response,
                 Err(e) => {
-                    tracing::error!("Failed to send check block request: {e}");
+                    error!("Failed to send check block request: {e}");
                     // send error response to the client
                     // deliberately ignore potential send errors
                     let _ = response_tx.send(JdResponse::Error {
                         error_code: ERROR_CODE_DECLARE_MINING_JOB_INTERNAL_ERROR,
                         validation_context: initial_validation_context,
                     });
-                    tracing::warn!("Terminating Sv2 Bitcoin Core IPC Connection");
+                    warn!("Terminating Sv2 Bitcoin Core IPC Connection");
                     self.cancellation_token.cancel();
                     return;
                 }
@@ -201,14 +202,14 @@ impl BitcoinCoreSv2JDP {
             let check_block_result = match check_block_response.get() {
                 Ok(result) => result,
                 Err(e) => {
-                    tracing::error!("Failed to get check block result: {e}");
+                    error!("Failed to get check block result: {e}");
                     // send error response to the client
                     // deliberately ignore potential send errors
                     let _ = response_tx.send(JdResponse::Error {
                         error_code: ERROR_CODE_DECLARE_MINING_JOB_INTERNAL_ERROR,
                         validation_context: initial_validation_context,
                     });
-                    tracing::warn!("Terminating Sv2 Bitcoin Core IPC Connection");
+                    warn!("Terminating Sv2 Bitcoin Core IPC Connection");
                     self.cancellation_token.cancel();
                     return;
                 }
@@ -218,29 +219,28 @@ impl BitcoinCoreSv2JDP {
             let check_block_reason = check_block_result.get_reason();
             let check_block_debug = check_block_result.get_debug();
 
-            tracing::debug!("checkBlock returned: {}", result);
+            debug!("checkBlock returned: {}", result);
             if !result {
-                tracing::error!(
+                error!(
                     reason = ?check_block_reason,
                     debug = ?check_block_debug,
                     "Bitcoin Core rejected the block via checkBlock"
                 );
-                tracing::debug!(
+                debug!(
                     "Block details - version: {:?}, prev_blockhash: {:?}, bits: {:?}, num_txs: {}",
                     version,
                     initial_validation_context.prev_hash,
                     initial_validation_context.nbits,
                     num_transactions
                 );
-                tracing::debug!(
+                debug!(
                     "Coinbase tx inputs: {}, outputs: {}",
                     coinbase_tx.input.len(),
                     coinbase_tx.output.len()
                 );
-                tracing::debug!(
+                debug!(
                     "Block header time: {}, merkle_root: {:?}",
-                    header.time,
-                    header.merkle_root
+                    header.time, header.merkle_root
                 );
             }
             result
@@ -253,7 +253,7 @@ impl BitcoinCoreSv2JDP {
             // Refreshing here narrows this TOCTOU window and lets us correctly emit
             // `stale-chain-tip` instead of generic `invalid-job` when context drift occurred.
             if let Err(e) = self.force_update_mempool_mirror().await {
-                tracing::debug!(
+                debug!(
                     error = ?e,
                     "Failed to force-refresh template/mempool mirror after checkBlock failure; continuing with current validation context"
                 );
@@ -296,7 +296,7 @@ impl BitcoinCoreSv2JDP {
                 || stale_at_arrival_by_bip34;
 
             let error_code = if context_drifted {
-                tracing::debug!(
+                debug!(
                     initial_prev_hash = ?initial_validation_context.prev_hash,
                     initial_nbits = ?initial_validation_context.nbits,
                     initial_min_ntime = initial_validation_context.min_ntime,
