@@ -47,8 +47,6 @@ mod io_task;
 #[cfg(feature = "monitoring")]
 mod monitoring;
 pub mod sv1;
-#[cfg(feature = "monitoring")]
-mod sv1_monitoring;
 pub mod sv2;
 pub mod utils;
 
