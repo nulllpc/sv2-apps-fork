@@ -30,9 +30,6 @@ jobs:
       - name: Check test compilation for pool
         run: cargo test --manifest-path=pool-apps/Cargo.toml --all-features --no-run
 
-      - name: Check test compilation for jd-server
-        run: cargo test --manifest-path=pool-apps/jd-server/Cargo.toml --no-run
-
       - name: Check test compilation for miner applications workspace
         run: cargo test --manifest-path=miner-apps/Cargo.toml --all-features --no-run
 
