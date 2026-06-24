@@ -6,10 +6,13 @@
 //! - Client channels (downstream miners connecting to JDC)
 
 use hex;
-use stratum_apps::monitoring::{
-    client::{ExtendedChannelInfo, StandardChannelInfo, Sv2ClientInfo, Sv2ClientsMonitoring},
-    server::{ServerExtendedChannelInfo, ServerInfo, ServerMonitoring},
-    MinerTelemetry, MinerTelemetryCollector,
+use stratum_apps::{
+    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
+    monitoring::{
+        client::{ExtendedChannelInfo, StandardChannelInfo, Sv2ClientInfo, Sv2ClientsMonitoring},
+        server::{ServerExtendedChannelInfo, ServerInfo, ServerMonitoring},
+        MinerTelemetry, MinerTelemetryCollector,
+    },
 };
 
 use crate::{channel_manager::ChannelManager, downstream::Downstream};
@@ -195,8 +198,8 @@ impl ChannelManager {
     pub(crate) async fn run_miner_telemetry_loop(
         &self,
         refresh_interval: Duration,
-        cancellation_token: bitcoin_core_sv2::template_distribution_protocol::CancellationToken,
-        fallback_token: bitcoin_core_sv2::template_distribution_protocol::CancellationToken,
+        cancellation_token: CancellationToken,
+        fallback_token: CancellationToken,
     ) {
         let refresh_interval = refresh_interval.max(Duration::from_secs(1));
         let collector = MinerTelemetryCollector::new();

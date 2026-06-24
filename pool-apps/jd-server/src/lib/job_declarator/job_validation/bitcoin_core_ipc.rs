@@ -7,10 +7,6 @@ use crate::{
         ALLOCATED_TOKEN_TIMEOUT_SECS, JANITOR_INTERVAL_SECS,
     },
 };
-use bitcoin_core_sv2::job_declaration_protocol::{
-    io::{JdRequest, JdResponse, ValidationContext},
-    BitcoinCoreSv2JDP, CancellationToken,
-};
 use dashmap::DashMap;
 use std::{
     path::PathBuf,
@@ -19,6 +15,14 @@ use std::{
     time::{Duration, Instant},
 };
 use stratum_apps::{
+    bitcoin_core_sv2::common::{
+        job_declaration_protocol::{
+            self,
+            io::{JdRequest, JdResponse, ValidationContext},
+            CancellationToken,
+        },
+        BitcoinCoreVersion,
+    },
     stratum_core::{
         bitcoin::{
             self,
@@ -223,8 +227,11 @@ impl BitcoinCoreIPCEngine {
     /// Spawns a dedicated thread running BitcoinCoreSv2JDP in a LocalSet for handling
     /// the !Send Cap'n Proto client.
     ///
+    /// `version` selects the Bitcoin Core IPC schema family (v30.x or v31.x).
+    ///
     /// Blocks until the mempool mirror is bootstrapped and ready to process requests.
     pub async fn new(
+        version: BitcoinCoreVersion,
         network: BitcoinNetwork,
         data_dir: Option<PathBuf>,
         cancellation_token: CancellationToken,
@@ -281,7 +288,8 @@ impl BitcoinCoreIPCEngine {
 
                 local_set
                     .run_until(async {
-                        let bitcoin_core_sv2_jdp = match BitcoinCoreSv2JDP::new(
+                        let bitcoin_core_sv2_jdp = match job_declaration_protocol::new(
+                            version,
                             unix_socket_path,
                             request_receiver,
                             cancellation_token_clone.clone(),

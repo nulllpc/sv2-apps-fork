@@ -14,7 +14,7 @@
 //! `BitcoinCoreSv2TDP` will not start distributing new templates until it receives the first
 //! `CoinbaseOutputConstraints` message.
 
-use bitcoin_core_sv2::template_distribution_protocol::BitcoinCoreSv2TDP;
+use bitcoin_core_sv2::unix_capnp::v31x::template_distribution_protocol::BitcoinCoreSv2TDP;
 use std::path::Path;
 
 use async_channel::unbounded;
@@ -23,7 +23,7 @@ use stratum_core::{
     template_distribution_sv2::{CoinbaseOutputConstraints, RequestTransactionData},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() {
@@ -68,7 +68,7 @@ async fn main() {
         let rt = match tokio::runtime::Runtime::new() {
             Ok(rt) => rt,
             Err(e) => {
-                tracing::error!("Failed to create Tokio runtime: {:?}", e);
+                error!("Failed to create Tokio runtime: {:?}", e);
                 cancellation_token_clone.cancel();
                 return;
             }
@@ -89,7 +89,7 @@ async fn main() {
             {
                 Ok(sv2_bitcoin_core) => sv2_bitcoin_core,
                 Err(e) => {
-                    tracing::error!("Failed to create BitcoinCoreToSv2: {:?}", e);
+                    error!("Failed to create BitcoinCoreToSv2: {:?}", e);
                     cancellation_token_clone.cancel();
                     return;
                 }
@@ -138,7 +138,7 @@ async fn main() {
                         match msg_sender_into_bitcoin_core_sv2_clone.send(request_transaction_data).await {
                             Ok(_) => (),
                             Err(e) => {
-                                tracing::error!("Failed to send request transaction data: {}", e);
+                                error!("Failed to send request transaction data: {}", e);
                                 cancellation_token_clone.cancel();
                                 return;
                             }
@@ -163,7 +163,7 @@ async fn main() {
         .send(new_coinbase_output_constraints)
         .await
     {
-        tracing::error!("Failed to send coinbase output constraints: {}", e);
+        error!("Failed to send coinbase output constraints: {}", e);
         cancellation_token.cancel();
     }
     info!("Sent CoinbaseOutputConstraints");

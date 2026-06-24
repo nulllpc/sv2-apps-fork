@@ -1,12 +1,17 @@
-use crate::template_distribution_protocol::error::TemplateDataError;
+//! Template-data helpers for Bitcoin Core v30.x Sv2 Template Distribution Protocol via capnp over
+//! UNIX socket.
+
+use crate::unix_capnp::v30x::template_distribution_protocol::error::TemplateDataError;
 
 use bitcoin_capnp_types::{
     mining_capnp::block_template::Client as BlockTemplateIpcClient,
     proxy_capnp::{thread::Client as ThreadIpcClient, thread_map::Client as ThreadMapIpcClient},
 };
+use bitcoin_capnp_types_v30 as bitcoin_capnp_types;
 use std::{fs::File, io::Write, path::Path};
 use stratum_core::bitcoin::{
     Target, Transaction, TxOut,
+    amount::{Amount, CheckedSum},
     block::{Block, Header, Version},
     consensus::{deserialize, serialize},
     hashes::{Hash, HashEngine, sha256d},
@@ -18,13 +23,13 @@ use stratum_core::{
         NewTemplate, RequestTransactionDataSuccess, SetNewPrevHash, SubmitSolution,
     },
 };
+use tracing::{debug, error, info};
 
 #[derive(Clone)]
 pub struct TemplateData {
     template_id: u64,
     header: Header,
     coinbase_tx: Transaction,
-    block_reward_remaining: u64,
     merkle_path: Vec<Vec<u8>>,
     template_ipc_client: BlockTemplateIpcClient,
 }
@@ -35,7 +40,6 @@ impl TemplateData {
         template_id: u64,
         header: Header,
         coinbase_tx: Transaction,
-        block_reward_remaining: u64,
         merkle_path: Vec<Vec<u8>>,
         template_ipc_client: BlockTemplateIpcClient,
     ) -> Self {
@@ -43,7 +47,6 @@ impl TemplateData {
             template_id,
             header,
             coinbase_tx,
-            block_reward_remaining,
             merkle_path,
             template_ipc_client,
         }
@@ -54,7 +57,7 @@ impl TemplateData {
         &self,
         thread_ipc_client: ThreadIpcClient,
     ) -> Result<(), TemplateDataError> {
-        tracing::debug!("Destroying template IPC client: {}", self.template_id);
+        debug!("Destroying template IPC client: {}", self.template_id);
         let mut destroy_ipc_client_request = self.template_ipc_client.destroy_request();
         let destroy_ipc_client_request_params = destroy_ipc_client_request.get();
 
@@ -82,9 +85,9 @@ impl TemplateData {
             coinbase_tx_version: self.get_coinbase_tx_version()?,
             coinbase_prefix: self.get_coinbase_script_sig()?,
             coinbase_tx_input_sequence: self.get_coinbase_input_sequence(),
-            coinbase_tx_value_remaining: self.block_reward_remaining,
-            coinbase_tx_outputs_count: self.get_required_coinbase_outputs().len() as u32,
-            coinbase_tx_outputs: self.get_serialized_required_coinbase_outputs()?,
+            coinbase_tx_value_remaining: self.get_coinbase_tx_value_remaining()?,
+            coinbase_tx_outputs_count: self.get_empty_coinbase_outputs().len() as u32,
+            coinbase_tx_outputs: self.get_serialized_empty_coinbase_outputs()?,
             coinbase_tx_locktime: self.get_coinbase_tx_lock_time(),
             merkle_path: self.get_merkle_path()?,
         };
@@ -134,7 +137,7 @@ impl TemplateData {
         let self_clone = self.clone();
         let path_dir = path_dir.to_path_buf();
         tokio::task::spawn_local(async move {
-            tracing::debug!("Creating a dedicated thread IPC client for getBlock request");
+            debug!("Creating a dedicated thread IPC client for getBlock request");
 
             // validate the solution
             let solution_header = {
@@ -148,9 +151,7 @@ impl TemplateData {
                     || solution_coinbase_tx.input[0].previous_output
                         != self_clone.coinbase_tx.input[0].previous_output
                 {
-                    tracing::error!(
-                        "Solution coinbase tx is not congruent with original coinbase tx"
-                    );
+                    error!("Solution coinbase tx is not congruent with original coinbase tx");
                     return;
                 }
 
@@ -177,7 +178,7 @@ impl TemplateData {
                 };
 
                 if let Err(e) = solution_header.validate_pow(solution_header.target()) {
-                    tracing::error!("Solution header is not valid: {}", e);
+                    error!("Solution header is not valid: {}", e);
                     return;
                 }
 
@@ -229,7 +230,7 @@ impl TemplateData {
                 File::create(&solution_block_path).expect("Failed to create solution block file");
             file.write_all(&solution_block_bytes)
                 .expect("Failed to write solution block to file");
-            tracing::info!(
+            info!(
                 "Solution block dumped to: {}",
                 solution_block_path.display()
             );
@@ -247,7 +248,7 @@ impl TemplateData {
 
         let solution_coinbase_tx: Transaction =
             deserialize(&solution_coinbase_tx_bytes).map_err(|e| {
-                tracing::error!("SubmitSolution.coinbase_tx is invalid: {}", e);
+                error!("SubmitSolution.coinbase_tx is invalid: {}", e);
                 TemplateDataError::InvalidCoinbaseTx(e)
             })?;
 
@@ -329,19 +330,36 @@ impl TemplateData {
         self.coinbase_tx.input[0].sequence.to_consensus_u32()
     }
 
-    fn get_required_coinbase_outputs(&self) -> &[TxOut] {
-        &self.coinbase_tx.output
+    fn get_empty_coinbase_outputs(&self) -> Vec<TxOut> {
+        self.coinbase_tx
+            .output
+            .iter()
+            .filter(|output| output.value == Amount::from_sat(0))
+            .cloned()
+            .collect()
     }
 
-    fn get_serialized_required_coinbase_outputs(&self) -> Result<B064K<'_>, TemplateDataError> {
-        let mut serialized_required_coinbase_outputs = Vec::new();
-        for output in self.get_required_coinbase_outputs() {
-            serialized_required_coinbase_outputs.extend_from_slice(&serialize(output));
+    fn get_serialized_empty_coinbase_outputs(&self) -> Result<B064K<'_>, TemplateDataError> {
+        let empty_coinbase_outputs = self.get_empty_coinbase_outputs();
+        let mut serialized_empty_coinbase_outputs = Vec::new();
+        for output in empty_coinbase_outputs {
+            serialized_empty_coinbase_outputs.extend_from_slice(&serialize(&output));
         }
-        let serialized_required_coinbase_outputs: B064K = serialized_required_coinbase_outputs
+        let serialized_empty_coinbase_outputs: B064K = serialized_empty_coinbase_outputs
             .try_into()
-            .map_err(|_| TemplateDataError::FailedToSerializeCoinbaseOutputs)?;
-        Ok(serialized_required_coinbase_outputs)
+            .map_err(|_| TemplateDataError::FailedToSerializeEmptyCoinbaseOutputs)?;
+        Ok(serialized_empty_coinbase_outputs)
+    }
+
+    fn get_coinbase_tx_value_remaining(&self) -> Result<u64, TemplateDataError> {
+        Ok(self
+            .coinbase_tx
+            .output
+            .iter()
+            .map(|output| output.value)
+            .checked_sum()
+            .ok_or(TemplateDataError::FailedToSumCoinbaseOutputs)?
+            .to_sat())
     }
 
     fn get_coinbase_tx_lock_time(&self) -> u32 {
@@ -352,7 +370,7 @@ impl TemplateData {
         &self,
         thread_map: ThreadMapIpcClient,
     ) -> Result<Seq064K<'_, B016M<'static>>, TemplateDataError> {
-        tracing::debug!("Creating a dedicated thread IPC client for get_tx_data");
+        debug!("Creating a dedicated thread IPC client for get_tx_data");
         let thread_ipc_client_request = thread_map.make_thread_request();
         let thread_ipc_client_response = thread_ipc_client_request.send().promise.await?;
         let thread_ipc_client = thread_ipc_client_response.get()?.get_result()?;
@@ -367,12 +385,12 @@ impl TemplateData {
         let template_block_bytes = template_block_response.get()?.get_result()?;
 
         // Deserialize the complete block template from Bitcoin Core's serialization format
-        tracing::debug!(
+        debug!(
             "Deserializing block template ({} bytes)",
             template_block_bytes.len()
         );
         let block: Block = deserialize(template_block_bytes)?;
-        tracing::debug!(
+        debug!(
             "Block deserialized - prev_hash from header: {:?}",
             block.header.prev_blockhash
         );

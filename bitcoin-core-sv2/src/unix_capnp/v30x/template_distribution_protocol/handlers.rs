@@ -1,27 +1,29 @@
-use crate::template_distribution_protocol::BitcoinCoreSv2TDP;
+//! Handlers for Bitcoin Core v30.x Sv2 Template Distribution Protocol via capnp over UNIX socket.
 
-use crate::template_distribution_protocol::error::BitcoinCoreSv2TDPError;
+use crate::unix_capnp::v30x::template_distribution_protocol::{
+    BitcoinCoreSv2TDP, error::BitcoinCoreSv2TDPError,
+};
 use stratum_core::{
     parsers_sv2::TemplateDistribution,
     template_distribution_sv2::{
-        CoinbaseOutputConstraints, ERROR_CODE_REQUEST_TRANSACTION_DATA_STALE_TEMPLATE_ID,
-        ERROR_CODE_REQUEST_TRANSACTION_DATA_TEMPLATE_ID_NOT_FOUND, RequestTransactionData,
-        RequestTransactionDataError, SubmitSolution,
+        CoinbaseOutputConstraints, RequestTransactionData, RequestTransactionDataError,
+        SubmitSolution,
     },
 };
 use tokio_util::sync::CancellationToken;
+use tracing::{debug, error};
 
 impl BitcoinCoreSv2TDP {
     pub(crate) async fn handle_coinbase_output_constraints(
         &mut self,
         coinbase_output_constraints: CoinbaseOutputConstraints,
     ) -> Result<(), BitcoinCoreSv2TDPError> {
-        tracing::debug!("handle_coinbase_output_constraints() called");
+        debug!("handle_coinbase_output_constraints() called");
 
         // Break the loop in monitor_ipc_templates() and spawn a new one after bootstrapping the
         // new template IPC client. We no longer care about templates created under previous
         // constraints for future template monitoring.
-        tracing::debug!("Cancelling template_ipc_client_cancellation_token");
+        debug!("Cancelling template_ipc_client_cancellation_token");
         self.template_ipc_client_cancellation_token.cancel();
 
         // Wait for the old monitor_ipc_templates task to finish before bootstrapping a new
@@ -30,30 +32,30 @@ impl BitcoinCoreSv2TDP {
         // This keeps template monitoring scoped to one coinbase-output constraint set at a time:
         // the old monitor interrupts its own in-flight waitNext request and exits before the
         // replacement client is published and monitored.
-        tracing::debug!("Waiting for current monitor_ipc_templates() task to finish");
+        debug!("Waiting for current monitor_ipc_templates() task to finish");
         let handle = self.monitor_ipc_templates_handle.borrow_mut().take();
         #[allow(clippy::collapsible_if)]
         if let Some(handle) = handle {
             if let Err(e) = handle.await {
-                tracing::error!("monitor_ipc_templates task panicked: {:?}", e);
+                error!("monitor_ipc_templates task panicked: {:?}", e);
                 return Err(BitcoinCoreSv2TDPError::FailedToWaitForMonitorIpcTemplatesTask);
             }
         }
 
         self.template_ipc_client_cancellation_token = CancellationToken::new();
-        tracing::debug!("Created new template_ipc_client_cancellation_token");
+        debug!("Created new template_ipc_client_cancellation_token");
 
-        tracing::debug!("Bootstrapping new template IPC client with new constraints");
+        debug!("Bootstrapping new template IPC client with new constraints");
         self.bootstrap_template_ipc_client_from_coinbase_output_constraints(
             coinbase_output_constraints,
         )
         .await
         .map_err(|e| {
-            tracing::error!("Failed to bootstrap new template IPC client: {:?}", e);
+            error!("Failed to bootstrap new template IPC client: {:?}", e);
             e
         })?;
 
-        tracing::debug!("Spawning new monitor_ipc_templates() task");
+        debug!("Spawning new monitor_ipc_templates() task");
         self.monitor_ipc_templates();
 
         Ok(())
@@ -63,26 +65,26 @@ impl BitcoinCoreSv2TDP {
         &self,
         request_transaction_data: RequestTransactionData,
     ) -> Result<(), BitcoinCoreSv2TDPError> {
-        tracing::debug!(
+        debug!(
             "handle_request_transaction_data() called for template_id: {}",
             request_transaction_data.template_id
         );
 
         let is_stale = {
             let stale_template_ids_guard = self.stale_template_ids.read().map_err(|e| {
-                tracing::error!("Failed to acquire read lock on stale_template_ids: {:?}", e);
+                error!("Failed to acquire read lock on stale_template_ids: {:?}", e);
                 BitcoinCoreSv2TDPError::FailedToSendRequestTransactionDataResponseMessage
             })?;
             stale_template_ids_guard.contains(&request_transaction_data.template_id)
         };
         if is_stale {
-            tracing::debug!(
+            debug!(
                 "Template {} is stale, sending error response",
                 request_transaction_data.template_id
             );
             let request_transaction_data_error = RequestTransactionDataError {
                 template_id: request_transaction_data.template_id,
-                error_code: ERROR_CODE_REQUEST_TRANSACTION_DATA_STALE_TEMPLATE_ID
+                error_code: "stale-template-id"
                     .to_string()
                     .try_into()
                     .expect("error code must be valid string"),
@@ -95,7 +97,7 @@ impl BitcoinCoreSv2TDP {
                 ))
                 .await
             {
-                tracing::error!(
+                error!(
                     "Failed to send RequestTransactionDataError message: {:?}",
                     e
                 );
@@ -109,7 +111,7 @@ impl BitcoinCoreSv2TDP {
 
         let template_data = {
             let template_data_guard = self.template_data.read().map_err(|e| {
-                tracing::error!("Failed to acquire read lock on template_data: {:?}", e);
+                error!("Failed to acquire read lock on template_data: {:?}", e);
                 BitcoinCoreSv2TDPError::FailedToSendRequestTransactionDataResponseMessage
             })?;
 
@@ -122,7 +124,7 @@ impl BitcoinCoreSv2TDP {
         let response_message = {
             match template_data {
                 Some(template_data) => {
-                    tracing::debug!(
+                    debug!(
                         "Template {} found, sending success response",
                         request_transaction_data.template_id
                     );
@@ -133,7 +135,7 @@ impl BitcoinCoreSv2TDP {
                     {
                         Ok(request_transaction_data_success) => request_transaction_data_success,
                         Err(e) => {
-                            tracing::error!("Failed to fetch template tx data: {:?}", e);
+                            error!("Failed to fetch template tx data: {:?}", e);
                             return Err(BitcoinCoreSv2TDPError::FailedToFetchTemplateTxData);
                         }
                     };
@@ -142,13 +144,13 @@ impl BitcoinCoreSv2TDP {
                     )
                 }
                 None => {
-                    tracing::debug!(
+                    debug!(
                         "Template {} not found, sending error response",
                         request_transaction_data.template_id
                     );
                     TemplateDistribution::RequestTransactionDataError(RequestTransactionDataError {
                         template_id: request_transaction_data.template_id,
-                        error_code: ERROR_CODE_REQUEST_TRANSACTION_DATA_TEMPLATE_ID_NOT_FOUND
+                        error_code: "template-id-not-found"
                             .to_string()
                             .try_into()
                             .expect("error code must be valid string"),
@@ -158,7 +160,7 @@ impl BitcoinCoreSv2TDP {
         };
 
         if let Err(e) = self.outgoing_messages.send(response_message.clone()).await {
-            tracing::error!("Failed to send message: {:?}", e);
+            error!("Failed to send message: {:?}", e);
             return Err(BitcoinCoreSv2TDPError::FailedToSendRequestTransactionDataResponseMessage);
         }
 
@@ -169,22 +171,22 @@ impl BitcoinCoreSv2TDP {
         &self,
         submit_solution: SubmitSolution<'static>,
     ) -> Result<(), BitcoinCoreSv2TDPError> {
-        tracing::debug!(
+        debug!(
             "handle_submit_solution() called for template_id: {}",
             submit_solution.template_id
         );
         let template_data = {
             let template_data_guard = self.template_data.read().map_err(|e| {
-                tracing::error!("Failed to acquire read lock on template_data: {:?}", e);
+                error!("Failed to acquire read lock on template_data: {:?}", e);
                 BitcoinCoreSv2TDPError::TemplateNotFound
             })?;
 
             let Some(template_data) = template_data_guard.get(&submit_solution.template_id) else {
-                tracing::error!(
+                error!(
                     "Template data not found for template id: {}",
                     submit_solution.template_id
                 );
-                tracing::debug!(
+                debug!(
                     "Available template IDs: {:?}",
                     template_data_guard.keys().collect::<Vec<_>>()
                 );
@@ -192,7 +194,7 @@ impl BitcoinCoreSv2TDP {
             };
             template_data.clone()
         };
-        tracing::debug!("Found template data for solution submission");
+        debug!("Found template data for solution submission");
 
         let solution_block_dir = self
             .unix_socket_path
@@ -203,12 +205,12 @@ impl BitcoinCoreSv2TDP {
 
         if !solutions_dir.exists() {
             std::fs::create_dir_all(&solutions_dir).map_err(|e| {
-                tracing::error!("Failed to create solutions directory: {:?}", e);
+                error!("Failed to create solutions directory: {:?}", e);
                 BitcoinCoreSv2TDPError::FailedToCreateSolutionDir
             })?;
         }
 
-        tracing::debug!("Submitting solution to Bitcoin Core");
+        debug!("Submitting solution to Bitcoin Core");
         match template_data
             .submit_solution(
                 submit_solution,
@@ -219,11 +221,11 @@ impl BitcoinCoreSv2TDP {
             .await
         {
             Ok(_) => {
-                tracing::debug!("Solution submitted successfully");
+                debug!("Solution submitted successfully");
                 Ok(())
             }
             Err(e) => {
-                tracing::error!("Failed to submit solution: {:?}", e);
+                error!("Failed to submit solution: {:?}", e);
                 Err(BitcoinCoreSv2TDPError::FailedToSubmitSolution)
             }
         }

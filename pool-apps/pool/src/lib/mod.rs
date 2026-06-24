@@ -8,8 +8,8 @@ use std::{
 
 use async_channel::unbounded;
 
-use bitcoin_core_sv2::template_distribution_protocol::CancellationToken;
 use stratum_apps::{
+    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
     stratum_core::bitcoin::consensus::Encodable, task_manager::TaskManager,
     tp_type::TemplateProviderType, utils::types::GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS,
 };
@@ -91,9 +91,13 @@ impl PoolSv2 {
             let ipc_engine: Arc<dyn JobValidationEngine> =
                 match self.config.template_provider_type() {
                     TemplateProviderType::BitcoinCoreIpc {
-                        network, data_dir, ..
+                        version,
+                        network,
+                        data_dir,
+                        ..
                     } => Arc::new(
                         BitcoinCoreIPCEngine::new(
+                            *version,
                             network.clone(),
                             data_dir.clone(),
                             cancellation_token.clone(),
@@ -219,6 +223,7 @@ impl PoolSv2 {
                 info!("Sv2 Template Provider setup done");
             }
             TemplateProviderType::BitcoinCoreIpc {
+                version,
                 network,
                 data_dir,
                 fee_threshold,
@@ -241,6 +246,7 @@ impl PoolSv2 {
 
                 let bitcoin_core_cancellation_token = CancellationToken::new();
                 let bitcoin_core_config = BitcoinCoreSv2TDPConfig {
+                    version,
                     unix_socket_path,
                     fee_threshold,
                     min_interval,

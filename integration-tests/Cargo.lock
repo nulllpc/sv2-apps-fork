@@ -1052,11 +1052,23 @@ dependencies = [
 
 [[package]]
 name = "bitcoin-capnp-types"
-version = "0.2.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a58af19b421a85566a1d46617f40b18eea77d565a0271bdff2deabf0d27c075c"
+checksum = "d54f319d1627278eaf932e167f91bfeb21a29124069501bbd32d80e7e5e28e0d"
 dependencies = [
  "capnp",
+ "capnp-rpc",
+ "capnpc",
+]
+
+[[package]]
+name = "bitcoin-capnp-types"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa52688d21da328acfaa3f23cd91b4dc1a7f01b02adc42d93438d714391dc52e"
+dependencies = [
+ "capnp",
+ "capnp-rpc",
  "capnpc",
 ]
 
@@ -1087,12 +1099,11 @@ dependencies = [
 
 [[package]]
 name = "bitcoin_core_sv2"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-channel 1.9.0",
- "bitcoin-capnp-types",
- "capnp",
- "capnp-rpc",
+ "bitcoin-capnp-types 0.1.2",
+ "bitcoin-capnp-types 0.2.1",
  "stratum-core",
  "tokio",
  "tokio-util",
@@ -1842,7 +1853,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1914,7 +1925,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2710,7 +2721,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2739,7 +2750,6 @@ name = "jd_client_sv2"
 version = "0.4.0"
 dependencies = [
  "async-channel 1.9.0",
- "bitcoin_core_sv2",
  "clap",
  "config",
  "hex",
@@ -2752,11 +2762,10 @@ dependencies = [
 
 [[package]]
 name = "jd_server_sv2"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-channel 1.9.0",
  "async-trait",
- "bitcoin_core_sv2",
  "dashmap",
  "hotpath",
  "serde",
@@ -3139,7 +3148,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3424,7 +3433,6 @@ name = "pool_sv2"
 version = "0.5.0"
 dependencies = [
  "async-channel 1.9.0",
- "bitcoin_core_sv2",
  "clap",
  "config",
  "hex",
@@ -3576,7 +3584,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.3",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3896,7 +3904,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3909,7 +3917,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3978,7 +3986,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4366,6 +4374,7 @@ dependencies = [
  "asic-rs",
  "async-channel 1.9.0",
  "axum",
+ "bitcoin_core_sv2",
  "bs58",
  "config",
  "dashmap",
@@ -4523,7 +4532,7 @@ dependencies = [
  "fastrand 2.4.1",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5364,15 +5373,6 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]

@@ -10,8 +10,8 @@ use std::{
 };
 
 use async_channel::{unbounded, Receiver, Sender};
-use bitcoin_core_sv2::template_distribution_protocol::CancellationToken;
 use stratum_apps::{
+    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
     fallback_coordinator::FallbackCoordinator,
     stratum_core::{bitcoin::consensus::Encodable, parsers_sv2::JobDeclaration},
     task_manager::TaskManager,
@@ -192,6 +192,7 @@ impl JobDeclaratorClient {
                 info!("Sv2 Template Provider setup done");
             }
             TemplateProviderType::BitcoinCoreIpc {
+                version,
                 network,
                 data_dir,
                 fee_threshold,
@@ -223,6 +224,7 @@ impl JobDeclaratorClient {
 
                 let bitcoin_core_cancellation_token = CancellationToken::new();
                 let bitcoin_core_config = BitcoinCoreSv2TDPConfig {
+                    version,
                     unix_socket_path,
                     fee_threshold,
                     min_interval,

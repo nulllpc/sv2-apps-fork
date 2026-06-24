@@ -4,8 +4,8 @@ use std::sync::{
 };
 
 use async_channel::{unbounded, Receiver, Sender};
-use bitcoin_core_sv2::template_distribution_protocol::CancellationToken;
 use stratum_apps::{
+    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
     channel_utils::ReceiverCleanup,
     network_helpers::noise_stream::NoiseTcpStream,
     stratum_core::{

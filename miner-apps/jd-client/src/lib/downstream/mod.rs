@@ -9,6 +9,7 @@ use std::net::IpAddr;
 
 use async_channel::{unbounded, Receiver, Sender};
 use stratum_apps::{
+    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
     channel_utils::ReceiverCleanup,
     custom_mutex::Mutex,
     fallback_coordinator::FallbackCoordinator,
@@ -24,8 +25,6 @@ use stratum_apps::{
     task_manager::TaskManager,
     utils::types::{DownstreamId, Message, Sv2Frame},
 };
-
-use bitcoin_core_sv2::template_distribution_protocol::CancellationToken;
 use tracing::{debug, error, warn};
 
 use crate::{

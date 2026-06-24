@@ -15,7 +15,6 @@ use crate::{
     },
 };
 use async_channel::{unbounded, Receiver, Sender};
-use bitcoin_core_sv2::job_declaration_protocol::CancellationToken;
 use dashmap::DashMap;
 use std::{
     net::SocketAddr,
@@ -25,6 +24,7 @@ use std::{
     },
 };
 use stratum_apps::{
+    bitcoin_core_sv2::common::job_declaration_protocol::CancellationToken,
     config_helpers::CoinbaseRewardScript,
     key_utils::{Secp256k1PublicKey, Secp256k1SecretKey},
     network_helpers::accept_noise_connection,
