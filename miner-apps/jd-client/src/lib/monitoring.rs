@@ -17,16 +17,16 @@ use stratum_apps::{
 
 use crate::{channel_manager::ChannelManager, downstream::Downstream};
 use std::{collections::HashSet, net::IpAddr, time::Duration};
-use tracing::{debug, info};
+use tracing::info;
 
 impl ServerMonitoring for ChannelManager {
     fn get_server(&self) -> ServerInfo {
-        self.channel_manager_data
-            .safe_lock(|d| {
+        self.upstream_channel
+            .with(|upstream_channel| {
                 let mut extended_channels = Vec::new();
                 let standard_channels = Vec::new(); // JDC only uses extended channels
 
-                if let Some(upstream_channel) = &d.upstream_channel {
+                if let Some(upstream_channel) = upstream_channel.as_ref() {
                     let channel_id = upstream_channel.get_channel_id();
                     let target = upstream_channel.get_target();
                     let extranonce_prefix = upstream_channel.get_extranonce_prefix();
@@ -76,125 +76,115 @@ fn downstream_to_sv2_client_info(
     client: &Downstream,
     miner_telemetry: Option<MinerTelemetry>,
 ) -> Option<Sv2ClientInfo> {
+    let mut extended_channels = Vec::new();
+    let mut standard_channels = Vec::new();
+
     client
-        .downstream_data
-        .safe_lock(|dd| {
-            let mut extended_channels = Vec::new();
-            let mut standard_channels = Vec::new();
+        .extended_channels
+        .for_each(|_channel_id, extended_channel| {
+            let channel_id = extended_channel.get_channel_id();
+            let target = extended_channel.get_target();
+            let requested_max_target = extended_channel.get_requested_max_target();
+            let user_identity = extended_channel.get_user_identity();
+            let share_accounting = extended_channel.get_share_accounting();
 
-            for (_channel_id, extended_channel) in dd.extended_channels.iter() {
-                let channel_id = extended_channel.get_channel_id();
-                let target = extended_channel.get_target();
-                let requested_max_target = extended_channel.get_requested_max_target();
-                let user_identity = extended_channel.get_user_identity();
-                let share_accounting = extended_channel.get_share_accounting();
+            extended_channels.push(ExtendedChannelInfo {
+                channel_id,
+                user_identity: user_identity.to_string(),
+                nominal_hashrate: extended_channel.get_nominal_hashrate(),
+                stable_hashrate: extended_channel.get_stable_hashrate(),
+                target_hex: hex::encode(target.to_be_bytes()),
+                requested_max_target_hex: hex::encode(requested_max_target.to_be_bytes()),
+                extranonce_prefix_hex: hex::encode(extended_channel.get_extranonce_prefix()),
+                full_extranonce_size: extended_channel.get_full_extranonce_size(),
+                rollable_extranonce_size: extended_channel.get_rollable_extranonce_size(),
+                expected_shares_per_minute: extended_channel.get_shares_per_minute(),
+                shares_accepted: share_accounting.get_shares_accepted(),
+                shares_rejected: share_accounting.get_rejected_shares_count(),
+                shares_rejected_by_reason: share_accounting
+                    .get_rejected_shares()
+                    .map(|(reason, count)| (reason.to_string(), count))
+                    .collect(),
+                share_work_sum: share_accounting.get_share_work_sum(),
+                last_share_sequence_number: share_accounting.get_last_share_sequence_number(),
+                best_diff: share_accounting.get_best_diff(),
+                last_batch_accepted: share_accounting.get_last_batch_accepted(),
+                last_batch_work_sum: share_accounting.get_last_batch_work_sum(),
+                share_batch_size: share_accounting.get_share_batch_size(),
+                blocks_found: share_accounting.get_blocks_found(),
+            });
+        });
 
-                extended_channels.push(ExtendedChannelInfo {
-                    channel_id,
-                    user_identity: user_identity.to_string(),
-                    nominal_hashrate: extended_channel.get_nominal_hashrate(),
-                    stable_hashrate: extended_channel.get_stable_hashrate(),
-                    target_hex: hex::encode(target.to_be_bytes()),
-                    requested_max_target_hex: hex::encode(requested_max_target.to_be_bytes()),
-                    extranonce_prefix_hex: hex::encode(extended_channel.get_extranonce_prefix()),
-                    full_extranonce_size: extended_channel.get_full_extranonce_size(),
-                    rollable_extranonce_size: extended_channel.get_rollable_extranonce_size(),
-                    expected_shares_per_minute: extended_channel.get_shares_per_minute(),
-                    shares_accepted: share_accounting.get_shares_accepted(),
-                    shares_rejected: share_accounting.get_rejected_shares_count(),
-                    shares_rejected_by_reason: share_accounting
-                        .get_rejected_shares()
-                        .map(|(reason, count)| (reason.to_string(), count))
-                        .collect(),
-                    share_work_sum: share_accounting.get_share_work_sum(),
-                    last_share_sequence_number: share_accounting.get_last_share_sequence_number(),
-                    best_diff: share_accounting.get_best_diff(),
-                    last_batch_accepted: share_accounting.get_last_batch_accepted(),
-                    last_batch_work_sum: share_accounting.get_last_batch_work_sum(),
-                    share_batch_size: share_accounting.get_share_batch_size(),
-                    blocks_found: share_accounting.get_blocks_found(),
-                });
-            }
+    client
+        .standard_channels
+        .for_each(|_channel_id, standard_channel| {
+            let channel_id = standard_channel.get_channel_id();
+            let target = standard_channel.get_target();
+            let requested_max_target = standard_channel.get_requested_max_target();
+            let user_identity = standard_channel.get_user_identity();
+            let share_accounting = standard_channel.get_share_accounting();
 
-            for (_channel_id, standard_channel) in dd.standard_channels.iter() {
-                let channel_id = standard_channel.get_channel_id();
-                let target = standard_channel.get_target();
-                let requested_max_target = standard_channel.get_requested_max_target();
-                let user_identity = standard_channel.get_user_identity();
-                let share_accounting = standard_channel.get_share_accounting();
+            standard_channels.push(StandardChannelInfo {
+                channel_id,
+                user_identity: user_identity.to_string(),
+                nominal_hashrate: standard_channel.get_nominal_hashrate(),
+                stable_hashrate: standard_channel.get_stable_hashrate(),
+                target_hex: hex::encode(target.to_be_bytes()),
+                requested_max_target_hex: hex::encode(requested_max_target.to_be_bytes()),
+                extranonce_prefix_hex: hex::encode(standard_channel.get_extranonce_prefix()),
+                expected_shares_per_minute: standard_channel.get_shares_per_minute(),
+                shares_accepted: share_accounting.get_shares_accepted(),
+                shares_rejected: share_accounting.get_rejected_shares_count(),
+                shares_rejected_by_reason: share_accounting
+                    .get_rejected_shares()
+                    .map(|(reason, count)| (reason.to_string(), count))
+                    .collect(),
+                share_work_sum: share_accounting.get_share_work_sum(),
+                last_share_sequence_number: share_accounting.get_last_share_sequence_number(),
+                best_diff: share_accounting.get_best_diff(),
+                last_batch_accepted: share_accounting.get_last_batch_accepted(),
+                last_batch_work_sum: share_accounting.get_last_batch_work_sum(),
+                share_batch_size: share_accounting.get_share_batch_size(),
+                blocks_found: share_accounting.get_blocks_found(),
+            });
+        });
 
-                standard_channels.push(StandardChannelInfo {
-                    channel_id,
-                    user_identity: user_identity.to_string(),
-                    nominal_hashrate: standard_channel.get_nominal_hashrate(),
-                    stable_hashrate: standard_channel.get_stable_hashrate(),
-                    target_hex: hex::encode(target.to_be_bytes()),
-                    requested_max_target_hex: hex::encode(requested_max_target.to_be_bytes()),
-                    extranonce_prefix_hex: hex::encode(standard_channel.get_extranonce_prefix()),
-                    expected_shares_per_minute: standard_channel.get_shares_per_minute(),
-                    shares_accepted: share_accounting.get_shares_accepted(),
-                    shares_rejected: share_accounting.get_rejected_shares_count(),
-                    shares_rejected_by_reason: share_accounting
-                        .get_rejected_shares()
-                        .map(|(reason, count)| (reason.to_string(), count))
-                        .collect(),
-                    share_work_sum: share_accounting.get_share_work_sum(),
-                    last_share_sequence_number: share_accounting.get_last_share_sequence_number(),
-                    best_diff: share_accounting.get_best_diff(),
-                    last_batch_accepted: share_accounting.get_last_batch_accepted(),
-                    last_batch_work_sum: share_accounting.get_last_batch_work_sum(),
-                    share_batch_size: share_accounting.get_share_batch_size(),
-                    blocks_found: share_accounting.get_blocks_found(),
-                });
-            }
-
-            Sv2ClientInfo {
-                client_id: client.downstream_id,
-                extended_channels,
-                standard_channels,
-                miner_telemetry,
-            }
-        })
-        .ok()
+    Some(Sv2ClientInfo {
+        client_id: client.downstream_id,
+        extended_channels,
+        standard_channels,
+        miner_telemetry,
+    })
 }
 
 impl Sv2ClientsMonitoring for ChannelManager {
     fn get_sv2_clients(&self) -> Vec<Sv2ClientInfo> {
-        // Clone Downstream references and release lock immediately to avoid contention
-        // with template distribution and message handling
-        let downstream_refs: Vec<Downstream> = self
-            .channel_manager_data
-            .safe_lock(|data| data.downstream.values().cloned().collect())
-            .unwrap_or_default();
+        let mut downstream_refs = Vec::new();
+        self.downstream
+            .for_each(|_, downstream| downstream_refs.push(downstream.clone()));
 
         downstream_refs
             .iter()
             .filter_map(|downstream| {
-                let miner_telemetry = self.miner_telemetry_for(downstream.downstream_id);
-                downstream_to_sv2_client_info(downstream, miner_telemetry)
+                downstream_to_sv2_client_info(
+                    downstream,
+                    self.miner_telemetry.get_cloned(&downstream.downstream_id),
+                )
             })
             .collect()
     }
 
     fn get_sv2_client_by_id(&self, client_id: usize) -> Option<Sv2ClientInfo> {
-        let miner_telemetry = self.miner_telemetry_for(client_id);
-        self.channel_manager_data
-            .safe_lock(|d| {
-                d.downstream.get(&client_id).and_then(|downstream| {
-                    downstream_to_sv2_client_info(downstream, miner_telemetry)
-                })
+        let miner_telemetry = self.miner_telemetry.get_cloned(&client_id);
+        self.downstream
+            .with(&client_id, |downstream| {
+                downstream_to_sv2_client_info(downstream, miner_telemetry)
             })
             .unwrap_or(None)
     }
 }
 
 impl ChannelManager {
-    pub(crate) fn miner_telemetry_for(&self, downstream_id: usize) -> Option<MinerTelemetry> {
-        self.miner_telemetry
-            .safe_lock(|telemetry| telemetry.get(&downstream_id).cloned())
-            .unwrap_or(None)
-    }
-
     pub(crate) async fn run_miner_telemetry_loop(
         &self,
         refresh_interval: Duration,
@@ -244,9 +234,8 @@ impl ChannelManager {
             .map(|(downstream_id, _)| *downstream_id)
             .collect::<HashSet<_>>();
 
-        let _ = self.miner_telemetry.safe_lock(|telemetry| {
-            telemetry.retain(|downstream_id, _| active_downstream_ids.contains(downstream_id));
-        });
+        self.miner_telemetry
+            .retain(|downstream_id, _| active_downstream_ids.contains(downstream_id));
 
         if downstreams.is_empty() {
             return;
@@ -255,46 +244,24 @@ impl ChannelManager {
         for (downstream_id, ip) in downstreams {
             match collector.fetch(ip).await {
                 Some(telemetry) => {
-                    let is_active = self
-                        .channel_manager_data
-                        .safe_lock(|data| data.downstream.contains_key(&downstream_id))
-                        .unwrap_or(false);
+                    let is_active = self.downstream.contains_key(&downstream_id);
 
                     if is_active {
-                        let _ = self
-                            .miner_telemetry
-                            .safe_lock(|cache| cache.insert(downstream_id, telemetry));
+                        self.miner_telemetry.insert(downstream_id, telemetry);
                     }
                 }
                 None => {
-                    let _ = self
-                        .miner_telemetry
-                        .safe_lock(|cache| cache.remove(&downstream_id));
+                    self.miner_telemetry.remove(&downstream_id);
                 }
             }
         }
     }
 
     fn current_downstream_connection_ips(&self) -> Vec<(usize, IpAddr)> {
-        let downstream_refs: Vec<Downstream> = self
-            .channel_manager_data
-            .safe_lock(|data| data.downstream.values().cloned().collect())
-            .unwrap_or_default();
-
-        downstream_refs
-            .iter()
-            .filter_map(|downstream| {
-                downstream
-                    .downstream_data
-                    .safe_lock(|data| (downstream.downstream_id, data.connection_ip))
-                    .map_err(|error| {
-                        debug!(
-                            downstream_id = downstream.downstream_id,
-                            "Failed to lock downstream data for telemetry: {error}"
-                        );
-                    })
-                    .ok()
-            })
-            .collect()
+        let mut downstream_connection = Vec::new();
+        self.downstream.for_each(|_, downstream| {
+            downstream_connection.push((downstream.downstream_id, downstream.connection_ip))
+        });
+        downstream_connection
     }
 }
