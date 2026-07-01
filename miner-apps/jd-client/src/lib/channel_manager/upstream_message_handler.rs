@@ -135,7 +135,7 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
                 );
 
                 let extranonce_allocator = match ExtranonceAllocator::from_upstream_prefix(
-                    msg.extranonce_prefix.to_vec(),
+                    msg.extranonce_prefix.to_owned_bytes(),
                     Vec::new(),
                     total_len as u8,
                     JDC_MAX_CHANNELS,
@@ -161,13 +161,14 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
                 // from_upstream_prefix` a few lines above, which enforces
                 // `total_extranonce_len <= MAX_EXTRANONCE_LEN` (and the
                 // prefix is bounded by `total_extranonce_len`).
-                let extranonce_prefix = ExtranoncePrefix::from_wire(msg.extranonce_prefix.to_vec())
-                    .expect("prefix length already validated by allocator");
+                let extranonce_prefix =
+                    ExtranoncePrefix::from_wire(msg.extranonce_prefix.to_owned_bytes())
+                        .expect("prefix length already validated by allocator");
                 let mut extended_channel = ExtendedChannel::new(
                     msg.channel_id,
                     self.user_identity().to_string(),
                     extranonce_prefix,
-                    Target::from_le_bytes(msg.target.inner_as_ref().try_into().unwrap()),
+                    Target::from_le_bytes(msg.target.to_array()),
                     hashrate,
                     true,
                     msg.extranonce_size,
@@ -378,16 +379,17 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
                         // Wire-sourced prefix: upstream could legitimately
                         // send a malformed (over-size) value. Treat as a
                         // protocol-level error and fall back.
-                        let new_extranonce_prefix =
-                            match ExtranoncePrefix::from_wire(msg.extranonce_prefix.to_vec()) {
-                                Ok(p) => p,
-                                Err(e) => {
-                                    warn!("Upstream SetExtranoncePrefix rejected: {e:?}");
-                                    return Err(JDCError::fallback(
-                                        JDCErrorKind::ExtranonceSizeTooLarge,
-                                    ));
-                                }
-                            };
+                        let new_extranonce_prefix = match ExtranoncePrefix::from_wire(
+                            msg.extranonce_prefix.to_owned_bytes(),
+                        ) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                warn!("Upstream SetExtranoncePrefix rejected: {e:?}");
+                                return Err(JDCError::fallback(
+                                    JDCErrorKind::ExtranonceSizeTooLarge,
+                                ));
+                            }
+                        };
                         if let Err(e) =
                             upstream_channel.set_extranonce_prefix(new_extranonce_prefix)
                         {
@@ -414,7 +416,7 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
                         // JDC's `local_index` (and therefore for downstream
                         // allocation). If it doesn't, we fall back.
                         let extranonce_allocator = match ExtranonceAllocator::from_upstream_prefix(
-                            msg.extranonce_prefix.to_vec(),
+                            msg.extranonce_prefix.to_owned_bytes(),
                             Vec::new(),
                             full_extranonce_size as u8,
                             JDC_MAX_CHANNELS,
@@ -742,9 +744,7 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
         info!("Received: {}", msg);
         self.channel_manager_data.super_safe_lock(|data| {
             if let Some(ref mut upstream) = data.upstream_channel {
-                upstream.set_target(Target::from_le_bytes(
-                    msg.maximum_target.clone().as_ref().try_into().unwrap(),
-                ));
+                upstream.set_target(Target::from_le_bytes(msg.maximum_target.to_array()));
             }
         });
         Ok(())

@@ -323,8 +323,7 @@ impl HandleTemplateDistributionMessagesFromServerAsync for ChannelManager {
         let reserialized_outputs = consensus::serialize(&deserialized_outputs);
 
         let tx_list: Vec<Transaction> = transactions_data
-            .to_vec()
-            .iter()
+            .iter_bytes()
             .map(|raw_tx| consensus::deserialize(raw_tx).expect("invalid tx"))
             .collect();
 
@@ -332,8 +331,7 @@ impl HandleTemplateDistributionMessagesFromServerAsync for ChannelManager {
             .iter()
             .map(|tx| {
                 let txid = tx.compute_wtxid();
-                let byte_array: [u8; 32] = *txid.as_byte_array();
-                U256::Owned(byte_array.to_vec())
+                U256::from(*txid.as_byte_array())
             })
             .collect();
 
@@ -358,12 +356,12 @@ impl HandleTemplateDistributionMessagesFromServerAsync for ChannelManager {
 
                 let declare_job = DeclareMiningJob {
                     request_id,
-                    mining_job_token: mining_token.to_vec().try_into().unwrap(),
+                    mining_job_token: mining_token,
                     version,
                     coinbase_tx_prefix: coinbase_tx_prefix.try_into().unwrap(),
                     coinbase_tx_suffix: coinbase_tx_suffix.try_into().unwrap(),
                     wtxid_list: wtx_ids,
-                    excess_data: excess_data.to_vec().try_into().unwrap(),
+                    excess_data: excess_data.into_static(),
                 };
 
                 let last_declare = DeclaredJob {
@@ -372,7 +370,10 @@ impl HandleTemplateDistributionMessagesFromServerAsync for ChannelManager {
                     prev_hash: data.last_new_prev_hash.clone(),
                     set_custom_mining_job: None,
                     coinbase_output: reserialized_outputs,
-                    tx_list: transactions_data.to_vec(),
+                    tx_list: transactions_data
+                        .iter_bytes()
+                        .map(|tx| tx.to_vec())
+                        .collect(),
                 };
 
                 data.last_declare_job_store.insert(request_id, last_declare);

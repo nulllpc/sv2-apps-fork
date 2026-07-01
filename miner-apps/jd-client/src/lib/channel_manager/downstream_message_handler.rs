@@ -251,7 +251,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
         let build_error = |code: &str| {
             Mining::OpenMiningChannelError(OpenMiningChannelError {
                 request_id,
-                error_code: code.to_string().try_into().expect("valid error code"),
+                error_code: code.try_into().expect("valid error code"),
             })
         };
 
@@ -293,9 +293,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                         let mut messages: Vec<RouteMessageTo> = vec![];
 
                         let nominal_hash_rate = msg.nominal_hash_rate;
-                        let requested_max_target = Target::from_le_bytes(
-                            msg.max_target.inner_as_ref().try_into().unwrap(),
-                        );
+                        let requested_max_target = Target::from_le_bytes(msg.max_target.to_array());
 
                         let group_channel_id = data.group_channel.get_group_channel_id();
 
@@ -341,7 +339,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
 
                         let open_standard_mining_channel_success =
                             OpenStandardMiningChannelSuccess {
-                                request_id: msg.request_id.clone(),
+                                request_id: msg.request_id,
                                 channel_id: standard_channel_id,
                                 target: standard_channel.get_target().to_le_bytes().into(),
                                 extranonce_prefix: standard_channel
@@ -484,14 +482,13 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
         let request_id = msg.get_request_id_as_u32();
 
         let nominal_hash_rate = msg.nominal_hash_rate;
-        let requested_max_target =
-            Target::from_le_bytes(msg.max_target.inner_as_ref().try_into().unwrap());
+        let requested_max_target = Target::from_le_bytes(msg.max_target.to_array());
         let requested_min_rollable_extranonce_size = msg.min_extranonce_size;
 
         let build_error = |code: &str| {
             Mining::OpenMiningChannelError(OpenMiningChannelError {
                 request_id,
-                error_code: code.to_string().try_into().expect("valid error code"),
+                error_code: code.try_into().expect("valid error code"),
             })
         };
 
@@ -747,8 +744,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
         info!("Received: {}", msg);
         let channel_id = msg.channel_id;
         let new_nominal_hash_rate = msg.nominal_hash_rate;
-        let requested_maximum_target =
-            Target::from_le_bytes(msg.maximum_target.inner_as_ref().try_into().unwrap());
+        let requested_maximum_target = Target::from_le_bytes(msg.maximum_target.to_array());
         let downstream_id =
             client_id.expect("client_id must be present for downstream_id extraction");
 
@@ -947,7 +943,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
             Mining::SubmitSharesError(SubmitSharesError {
                 channel_id,
                 sequence_number: msg.sequence_number,
-                error_code: code.to_string().try_into().expect("valid error code"),
+                error_code: code.try_into().expect("valid error code"),
             })
         };
 
@@ -1070,7 +1066,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                     let mut upstream_message = SubmitSharesExtended {
                         channel_id: upstream_channel.get_channel_id(),
                         job_id: 0, // set later if known
-                        extranonce: extranonce.to_vec().try_into().map_err(JDCError::shutdown)?,
+                        extranonce: extranonce.try_into().map_err(JDCError::shutdown)?,
                         nonce: msg.nonce,
                         ntime: msg.ntime,
                         // We assign sequence number later, when we validate the share
@@ -1105,7 +1101,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                                     upstream_message.sequence_number = channel_manager_data.sequence_number_factory.fetch_add(1, Ordering::Relaxed);
                                     info!("SubmitSharesStandard forwarding it to upstream: 💰 Block Found!!! 💰{share_hash}");
                                     let push_solution = PushSolution {
-                                        extranonce: standard_channel.get_extranonce_prefix().to_vec().try_into().map_err(JDCError::shutdown)?,
+                                        extranonce: standard_channel.get_extranonce_prefix().try_into().map_err(JDCError::shutdown)?,
                                         ntime: upstream_message.ntime,
                                         nonce: upstream_message.nonce,
                                         version: upstream_message.version,
@@ -1197,7 +1193,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
             Mining::SubmitSharesError(SubmitSharesError {
                 channel_id,
                 sequence_number: msg.sequence_number,
-                error_code: code.to_string().try_into().expect("valid error code"),
+                error_code: code.try_into().expect("valid error code"),
             })
         };
 
@@ -1340,7 +1336,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
 
                     let mut extranonce = vec![];
                     extranonce.extend_from_slice(new_extranonce_prefix);
-                    extranonce.extend_from_slice(&msg.extranonce.to_vec());
+                    extranonce.extend_from_slice(msg.extranonce.as_bytes());
                     upstream_message.extranonce = extranonce.try_into().map_err(|e| JDCError::disconnect(e, downstream_id))?;
 
                     match upstream_job_id {
@@ -1371,7 +1367,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                                     upstream_message.sequence_number = channel_manager_data.sequence_number_factory.fetch_add(1, Ordering::Relaxed);
                                     info!("SubmitSharesExtended forwarding it to upstream: 💰 Block Found!!! 💰{share_hash}");
                                     let mut channel_extranonce = upstream_channel.get_extranonce_prefix().to_vec();
-                                    channel_extranonce.extend_from_slice(&upstream_message.extranonce.to_vec());
+                                    channel_extranonce.extend_from_slice(upstream_message.extranonce.as_bytes());
                                     let push_solution = PushSolution {
                                         extranonce: channel_extranonce.try_into().map_err(JDCError::shutdown)?,
                                         ntime: upstream_message.ntime,
