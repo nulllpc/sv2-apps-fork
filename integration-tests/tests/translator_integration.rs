@@ -1390,7 +1390,7 @@ async fn non_aggregated_translator_handles_set_group_channel_message() {
     // send a SetGroupChannel message to set GROUP_CHANNEL_ID_B
     let set_group_channel =
         AnyMessage::Mining(parsers_sv2::Mining::SetGroupChannel(SetGroupChannel {
-            channel_ids: group_channel_b_ids.clone().into(),
+            channel_ids: group_channel_b_ids.clone().try_into().unwrap(),
             group_channel_id: GROUP_CHANNEL_ID_B,
         }));
     send_to_tproxy.send(set_group_channel).await.unwrap();
@@ -1630,7 +1630,7 @@ async fn non_aggregated_translator_correctly_deals_with_close_channel_message() 
     const CLOSED_CHANNEL_ID: u32 = 0;
     let close_channel = AnyMessage::Mining(parsers_sv2::Mining::CloseChannel(CloseChannel {
         channel_id: CLOSED_CHANNEL_ID,
-        reason_code: "".to_string().try_into().unwrap(),
+        reason_code: "".try_into().unwrap(),
     }));
     send_to_tproxy.send(close_channel).await.unwrap();
     sniffer
@@ -1690,7 +1690,7 @@ async fn non_aggregated_translator_correctly_deals_with_close_channel_message() 
     // now let's send a CloseChannel for the group channel
     let close_channel = AnyMessage::Mining(parsers_sv2::Mining::CloseChannel(CloseChannel {
         channel_id: GROUP_CHANNEL_ID,
-        reason_code: "".to_string().try_into().unwrap(),
+        reason_code: "".try_into().unwrap(),
     }));
     send_to_tproxy.send(close_channel).await.unwrap();
     sniffer
@@ -1864,7 +1864,7 @@ async fn aggregated_translator_triggers_fallback_on_close_channel_message() {
     // now, lets send a CloseChannel message for the channel
     let close_channel = AnyMessage::Mining(parsers_sv2::Mining::CloseChannel(CloseChannel {
         channel_id: 0,
-        reason_code: "".to_string().try_into().unwrap(),
+        reason_code: "".try_into().unwrap(),
     }));
     send_to_tproxy_a.send(close_channel).await.unwrap();
 
@@ -2565,7 +2565,7 @@ async fn tproxy_per_upstream_user_identity_switches_on_fallback() {
         .send(AnyMessage::Common(
             parsers_sv2::CommonMessages::SetupConnectionError(SetupConnectionError {
                 flags: 0,
-                error_code: "test-identity-fallback".to_string().try_into().unwrap(),
+                error_code: "test-identity-fallback".try_into().unwrap(),
             }),
         ))
         .await

@@ -413,7 +413,7 @@ impl JobDeclarator {
         let request_id = set_custom_mining_job.request_id;
         let channel_id = set_custom_mining_job.channel_id;
 
-        let active_token: JdToken = match set_custom_mining_job.token.inner_as_ref().try_into() {
+        let active_token: JdToken = match set_custom_mining_job.token.try_as_array::<8>() {
             Ok(token_bytes) => {
                 let token = u64::from_le_bytes(token_bytes);
                 debug!(

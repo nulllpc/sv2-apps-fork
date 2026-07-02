@@ -1,6 +1,6 @@
 use stratum_apps::{
     stratum_core::{
-        binary_sv2::{Seq064K, Sv2DataType, B016M},
+        binary_sv2::{Seq064K, B016M},
         bitcoin::{
             self, absolute::LockTime, transaction::Version, OutPoint, ScriptBuf, Sequence,
             Transaction, TxIn, TxOut, Witness,
@@ -55,8 +55,8 @@ impl HandleJobDeclarationMessagesFromServerAsync for ChannelManager {
         info!("Received: {}", msg);
 
         let coinbase_changed = self.channel_manager_data.super_safe_lock(|data| {
-            let changed = data.coinbase_outputs != msg.coinbase_outputs.to_vec();
-            data.coinbase_outputs = msg.coinbase_outputs.to_vec();
+            let changed = data.coinbase_outputs != msg.coinbase_outputs.as_bytes();
+            data.coinbase_outputs = msg.coinbase_outputs.to_owned_bytes();
             data.allocate_tokens.push_back(msg.clone().into_static());
             changed
         });
@@ -64,7 +64,7 @@ impl HandleJobDeclarationMessagesFromServerAsync for ChannelManager {
         if coinbase_changed {
             info!("Coinbase outputs from JDS changed, recalculating constraints");
             let deserialized_jds_coinbase_outputs: Vec<TxOut> =
-                bitcoin::consensus::deserialize(&msg.coinbase_outputs.to_vec())
+                bitcoin::consensus::deserialize(msg.coinbase_outputs.as_bytes())
                     .map_err(JDCError::shutdown)?;
 
             let max_additional_size: usize = deserialized_jds_coinbase_outputs
@@ -275,11 +275,12 @@ impl HandleJobDeclarationMessagesFromServerAsync for ChannelManager {
             )));
         };
 
-        let full_tx_list: Vec<B016M> = entry
+        let full_tx_list: Vec<B016M<'static>> = entry
             .tx_list
             .iter()
-            .map(|raw| B016M::from_vec_unchecked(raw.clone()))
-            .collect();
+            .cloned()
+            .map(|raw| raw.try_into().map_err(JDCError::shutdown))
+            .collect::<Result<_, _>>()?;
 
         let unknown_positions: Vec<u16> = msg.unknown_tx_position_list.into_inner();
         debug!(
@@ -288,7 +289,7 @@ impl HandleJobDeclarationMessagesFromServerAsync for ChannelManager {
             "Resolving missing transactions"
         );
 
-        let missing_txns: Vec<B016M> = unknown_positions
+        let missing_txns: Vec<B016M<'static>> = unknown_positions
             .iter()
             .filter_map(|&pos| full_tx_list.get(pos as usize).cloned())
             .collect();

@@ -309,8 +309,7 @@ impl Sv1Server {
     /// Non-aggregated mode: Each SetTarget updates one specific downstream and processes its
     /// pending update
     pub(super) async fn handle_set_target_message(&self, set_target: SetTarget<'_>) {
-        let new_upstream_target =
-            Target::from_le_bytes(set_target.maximum_target.inner_as_ref().try_into().unwrap());
+        let new_upstream_target = Target::from_le_bytes(set_target.maximum_target.to_array());
         debug!(
             "Received SetTarget for channel {}: new_upstream_target = {}",
             set_target.channel_id, new_upstream_target

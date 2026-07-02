@@ -103,9 +103,9 @@ impl DeclaredCustomJob {
     /// "invalid-coinbase-tx"
     fn get_coinbase_tx(&self) -> Result<Transaction, ()> {
         let declared_coinbase_tx_prefix: Vec<u8> =
-            self.declare_mining_job.coinbase_tx_prefix.to_vec();
+            self.declare_mining_job.coinbase_tx_prefix.to_owned_bytes();
         let declared_coinbase_tx_suffix: Vec<u8> =
-            self.declare_mining_job.coinbase_tx_suffix.to_vec();
+            self.declare_mining_job.coinbase_tx_suffix.to_owned_bytes();
 
         // Parse scriptSig size from coinbase prefix
         // Coinbase structure: version(4) + marker+flag(2) + input_count(1) + outpoint(32) +
@@ -436,10 +436,7 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
         provide_missing_transactions_success: Option<ProvideMissingTransactionsSuccess<'_>>,
     ) -> DeclareMiningJobResult {
         // Extract allocated token from the message
-        let allocated_token: JdToken = match declare_mining_job
-            .mining_job_token
-            .inner_as_ref()
-            .try_into()
+        let allocated_token: JdToken = match declare_mining_job.mining_job_token.try_as_array::<8>()
         {
             Ok(token_bytes) => u64::from_le_bytes(token_bytes),
             Err(_) => {
@@ -491,20 +488,15 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
         // Extract wtxid_list from DeclareMiningJob message
         let wtxid_list: Vec<Wtxid> = declare_mining_job
             .wtxid_list
-            .inner_as_ref()
             .iter()
-            .map(|u256_bytes| {
-                let bytes: [u8; 32] = (*u256_bytes).try_into().expect("U256 is 32 bytes");
-                Wtxid::from_byte_array(bytes)
-            })
+            .map(|u256| Wtxid::from_byte_array(u256.to_array()))
             .collect();
 
         // Parse missing transactions from ProvideMissingTransactionsSuccess
         let missing_txs: Vec<Transaction> =
             if let Some(ref pmts) = provide_missing_transactions_success {
                 pmts.transaction_list
-                    .inner_as_ref()
-                    .iter()
+                    .iter_bytes()
                     .filter_map(|tx_bytes| {
                         match bitcoin::consensus::Decodable::consensus_decode(&mut &tx_bytes[..]) {
                             Ok(tx) => Some(tx),
@@ -718,11 +710,7 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
 
         // Extract values from SetCustomMiningJob message
         let custom_job_prev_hash = {
-            let bytes: [u8; 32] = set_custom_mining_job
-                .prev_hash
-                .to_vec()
-                .try_into()
-                .expect("U256 is 32 bytes");
+            let bytes = set_custom_mining_job.prev_hash.to_array();
             BlockHash::from_byte_array(bytes)
         };
         let custom_job_nbits: u32 = set_custom_mining_job.nbits;
@@ -793,8 +781,8 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
             }
 
             let script_sig = declared_coinbase_tx.input[0].script_sig.as_bytes();
-            let coinbase_prefix = set_custom_mining_job.coinbase_prefix.to_vec();
-            if !script_sig.starts_with(&coinbase_prefix) {
+            let coinbase_prefix = set_custom_mining_job.coinbase_prefix.as_bytes();
+            if !script_sig.starts_with(coinbase_prefix) {
                 tracing::debug!("coinbase prefix mismatch");
                 return SetCustomMiningJobResult::Error(
                     ERROR_CODE_SET_CUSTOM_MINING_JOB_INVALID_COINBASE_PREFIX,
@@ -816,7 +804,7 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
 
             let declared_outputs_bytes =
                 bitcoin::consensus::serialize(&declared_coinbase_tx.output);
-            if declared_outputs_bytes != set_custom_mining_job.coinbase_tx_outputs.to_vec() {
+            if declared_outputs_bytes != set_custom_mining_job.coinbase_tx_outputs.as_bytes() {
                 tracing::debug!("coinbase outputs mismatch");
                 return SetCustomMiningJobResult::Error(
                     ERROR_CODE_SET_CUSTOM_MINING_JOB_INVALID_COINBASE_TX_OUTPUTS,
@@ -850,12 +838,8 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
 
             let custom_merkle_path: Vec<TxMerkleNode> = set_custom_mining_job
                 .merkle_path
-                .inner_as_ref()
                 .iter()
-                .map(|u256_bytes| {
-                    let bytes: [u8; 32] = (*u256_bytes).try_into().expect("U256 is 32 bytes");
-                    TxMerkleNode::from_byte_array(bytes)
-                })
+                .map(|u256| TxMerkleNode::from_byte_array(u256.to_array()))
                 .collect();
 
             if declared_merkle_path != custom_merkle_path {

@@ -174,8 +174,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
                     .map_err(PoolError::shutdown)?;
 
                 let nominal_hash_rate = msg.nominal_hash_rate;
-                let requested_max_target =
-                    Target::from_le_bytes(msg.max_target.inner_as_ref().try_into().unwrap());
+                let requested_max_target = Target::from_le_bytes(msg.max_target.to_array());
                 let extranonce_prefix = self
                     .extranonce_allocator
                     .with(|allocator| allocator.allocate_standard())
@@ -341,8 +340,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
         info!("Received OpenExtendedMiningChannel: {}", msg);
 
         let nominal_hash_rate = msg.nominal_hash_rate;
-        let requested_max_target =
-            Target::from_le_bytes(msg.max_target.inner_as_ref().try_into().unwrap());
+        let requested_max_target = Target::from_le_bytes(msg.max_target.to_array());
         let requested_min_rollable_extranonce_size = msg.min_extranonce_size;
 
         let messages = self.with_registered_downstream(downstream_id, |downstream| {
@@ -1135,8 +1133,7 @@ impl HandleMiningMessagesFromClientAsync for ChannelManager {
             client_id.expect("client_id must be present for downstream_id extraction");
         let channel_id = msg.channel_id;
         let new_nominal_hash_rate = msg.nominal_hash_rate;
-        let requested_maximum_target =
-            Target::from_le_bytes(msg.maximum_target.inner_as_ref().try_into().unwrap());
+        let requested_maximum_target = Target::from_le_bytes(msg.maximum_target.to_array());
         let messages = self.with_registered_downstream(downstream_id, |downstream| {
             let mut messages: Vec<RouteMessageTo> = Vec::new();
 

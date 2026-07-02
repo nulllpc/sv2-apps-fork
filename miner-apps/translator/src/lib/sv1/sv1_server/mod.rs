@@ -758,11 +758,10 @@ impl Sv1Server {
                     )));
                 };
                 if let Some(downstream) = self.downstreams.get(&downstream_id) {
-                    let initial_target =
-                        Target::from_le_bytes(m.target.inner_as_ref().try_into().unwrap());
+                    let initial_target = Target::from_le_bytes(m.target.to_array());
                     let extranonce1 = m
                         .extranonce_prefix
-                        .to_vec()
+                        .to_owned_bytes()
                         .try_into()
                         .map_err(TproxyError::fallback)?;
                     downstream
@@ -1081,8 +1080,7 @@ impl Sv1Server {
         &self,
         set_target: SetTarget<'_>,
     ) -> TproxyResult<(), error::Sv1Server> {
-        let new_target =
-            Target::from_le_bytes(set_target.maximum_target.inner_as_ref().try_into().unwrap());
+        let new_target = Target::from_le_bytes(set_target.maximum_target.to_array());
         debug!(
             "Forwarding SetTarget to downstreams: channel_id={}, target={}",
             set_target.channel_id, new_target
