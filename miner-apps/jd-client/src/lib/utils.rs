@@ -15,7 +15,7 @@ use std::{
     collections::BinaryHeap,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicU32, AtomicU8, Ordering},
         Arc,
     },
 };
@@ -25,7 +25,7 @@ use stratum_apps::{
     stratum_core::{
         binary_sv2::Str0255,
         bitcoin::hashes::sha256d,
-        channels_sv2::client,
+        channels_sv2::{client, client::extended::ExtendedChannel},
         common_messages_sv2::{Protocol, SetupConnection},
         job_declaration_sv2::PushSolution,
         mining_sv2::{
@@ -33,14 +33,14 @@ use stratum_apps::{
             SubmitSharesExtended,
         },
         parsers_sv2::{JobDeclaration, Mining, Tlv},
+        template_distribution_sv2::SetNewPrevHash as SetNewPrevHashTdp,
     },
     utils::types::{ChannelId, DownstreamId, Hashrate, JobId},
 };
 use tracing::{debug, info};
 
 use crate::{
-    channel_manager::{downstream_message_handler::RouteMessageTo, ChannelManagerData},
-    error::JDCErrorKind,
+    channel_manager::downstream_message_handler::RouteMessageTo, error::JDCErrorKind,
     jd_mode::JDMode,
 };
 
@@ -316,21 +316,15 @@ impl From<(DownstreamId, ChannelId, JobId)> for DownstreamChannelJobId {
 /// to upstream.
 pub fn validate_cached_share(
     mut upstream_message: SubmitSharesExtended<'static>,
-    channel_manager_data: &mut ChannelManagerData,
+    upstream_channel: &mut ExtendedChannel<'static>,
+    prev_hash: &SetNewPrevHashTdp<'static>,
+    sequence_number_factory: &AtomicU32,
     messages: &mut Vec<RouteMessageTo>,
 ) {
-    let Some(upstream_channel) = channel_manager_data.upstream_channel.as_mut() else {
-        return;
-    };
-    let Some(prev_hash) = channel_manager_data.last_new_prev_hash.as_ref() else {
-        return;
-    };
-
     match upstream_channel.validate_share(upstream_message.clone()) {
         Ok(client::share_accounting::ShareValidationResult::Valid(share_hash)) => {
-            upstream_message.sequence_number = channel_manager_data
-                .sequence_number_factory
-                .fetch_add(1, Ordering::Relaxed);
+            upstream_message.sequence_number =
+                sequence_number_factory.fetch_add(1, Ordering::Relaxed);
 
             info!(
                 "Cached SubmitSharesExtended: valid share, forwarding it to upstream | channel_id: {}, sequence_number: {}, share_hash: {}  ✅",  upstream_message.channel_id, upstream_message.sequence_number, share_hash
@@ -340,9 +334,8 @@ pub fn validate_cached_share(
         }
 
         Ok(client::share_accounting::ShareValidationResult::BlockFound(share_hash)) => {
-            upstream_message.sequence_number = channel_manager_data
-                .sequence_number_factory
-                .fetch_add(1, Ordering::Relaxed);
+            upstream_message.sequence_number =
+                sequence_number_factory.fetch_add(1, Ordering::Relaxed);
 
             info!("💰 Block Found (cached extended)!!! 💰 {share_hash}");
 
