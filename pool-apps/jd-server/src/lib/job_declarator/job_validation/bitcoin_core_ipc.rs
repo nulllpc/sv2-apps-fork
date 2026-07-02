@@ -432,30 +432,14 @@ impl BitcoinCoreIPCEngine {
                     _ = tokio::time::sleep(janitor_interval) => {
                         let now = Instant::now();
                         janitor_downstream_states.for_each_mut(|downstream_id, state| {
-                            let expired_tokens: Vec<JdToken> = state
-                                .allocated_token_entries
-                                .iter()
-                                .filter_map(|(token, entry)| {
-                                    if now.saturating_duration_since(entry.inserted_at)
-                                        > token_timeout
-                                    {
-                                        Some(*token)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
-
-                            for token in expired_tokens {
-                                if let Some(entry) = state.allocated_token_entries.remove(&token) {
-                                    state.declared_custom_jobs.remove(&entry.request_id);
-                                    tracing::debug!(
-                                        downstream_id,
-                                        token,
-                                        request_id = entry.request_id,
-                                        "Removed expired declared custom job state"
-                                    );
-                                }
+                            let expired = state.prune_expired_allocations(now, token_timeout);
+                            for (token, request_id) in expired {
+                                tracing::debug!(
+                                    downstream_id,
+                                    token,
+                                    request_id,
+                                    "Removed expired declared custom job state"
+                                );
                             }
                         });
                     }
@@ -493,6 +477,10 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
                 }
             }
         }
+    }
+
+    fn cleanup_downstream(&self, downstream_id: DownstreamId) {
+        self.downstream_states.remove(&downstream_id);
     }
 
     /// Validates a `DeclareMiningJob` by forwarding it to Bitcoin Core over IPC.
@@ -768,34 +756,10 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
         set_custom_mining_job: SetCustomMiningJob<'_>,
         allocated_token: JdToken, // Note: This is the corresponding DeclareMiningJob token
     ) -> SetCustomMiningJobResult {
-        // Look up request_id using the allocated token
-        let request_id = match self
-            .downstream_states
-            .with(&downstream_id, |state| {
-                state
-                    .allocated_token_entries
-                    .get(&allocated_token)
-                    .map(|entry| entry.request_id)
-            })
-            .flatten()
-        {
-            Some(request_id) => request_id,
-            None => {
-                tracing::debug!(
-                    downstream_id,
-                    allocated_token,
-                    "Provided token is not associated with any DeclareMiningJob request"
-                );
-                return SetCustomMiningJobResult::Error(
-                    ERROR_CODE_SET_CUSTOM_MINING_JOB_INVALID_MINING_JOB_TOKEN,
-                );
-            }
-        };
-
         let declared_custom_job = match self
             .downstream_states
             .with_mut(&downstream_id, |state| {
-                state.take_declared_custom_job(request_id, allocated_token)
+                state.take_declared_custom_job(allocated_token)
             })
             .flatten()
         {
@@ -804,8 +768,7 @@ impl JobValidationEngine for BitcoinCoreIPCEngine {
                 tracing::debug!(
                     downstream_id,
                     allocated_token,
-                    request_id,
-                    "DeclaredCustomJob associated with allocated token and request id not found"
+                    "Provided token is not associated with any DeclareMiningJob request"
                 );
                 return SetCustomMiningJobResult::Error(
                     ERROR_CODE_SET_CUSTOM_MINING_JOB_INVALID_MINING_JOB_TOKEN,

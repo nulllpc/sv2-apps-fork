@@ -173,17 +173,33 @@ impl HandleJobDeclarationMessagesFromClientAsync for JobDeclarator {
         {
             // if job is valid, activate token and return DeclareMiningJobSuccess
             DeclareMiningJobResult::Success => {
-                let activated_token = self.token_manager.activate(token, client_id);
-
-                let declare_mining_job_success = DeclareMiningJobSuccess {
-                    request_id: msg.request_id,
-                    new_mining_job_token: activated_token
-                        .to_le_bytes()
-                        .to_vec()
-                        .try_into()
-                        .expect("must always be valid B0_255"),
-                };
-                JobDeclaration::DeclareMiningJobSuccess(declare_mining_job_success)
+                match self.token_manager.activate(token, client_id) {
+                    Some(activated_token) => {
+                        let declare_mining_job_success = DeclareMiningJobSuccess {
+                            request_id: msg.request_id,
+                            new_mining_job_token: activated_token
+                                .to_le_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("must always be valid B0_255"),
+                        };
+                        JobDeclaration::DeclareMiningJobSuccess(declare_mining_job_success)
+                    }
+                    None => {
+                        let declare_mining_job_error = DeclareMiningJobError {
+                            request_id: msg.request_id,
+                            error_code: ERROR_CODE_DECLARE_MINING_JOB_INVALID_MINING_JOB_TOKEN
+                                .as_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("error code string must be valid B0_255"),
+                            error_details: Vec::new()
+                                .try_into()
+                                .expect("empty array must be valid B0_64K"),
+                        };
+                        JobDeclaration::DeclareMiningJobError(declare_mining_job_error)
+                    }
+                }
             }
             // if job is invalid, return DeclareMiningJobError
             DeclareMiningJobResult::Error(error) => {
@@ -308,19 +324,36 @@ impl HandleJobDeclarationMessagesFromClientAsync for JobDeclarator {
         {
             // if job is valid, activate token and return DeclareMiningJobSuccess
             DeclareMiningJobResult::Success => {
-                let activated_token = self
+                match self
                     .token_manager
-                    .activate(pending_declare_mining_job_token, client_id);
-
-                let declare_mining_job_success = DeclareMiningJobSuccess {
-                    request_id: msg.request_id,
-                    new_mining_job_token: activated_token
-                        .to_le_bytes()
-                        .to_vec()
-                        .try_into()
-                        .expect("must always be valid B0_255"),
-                };
-                JobDeclaration::DeclareMiningJobSuccess(declare_mining_job_success)
+                    .activate(pending_declare_mining_job_token, client_id)
+                {
+                    Some(activated_token) => {
+                        let declare_mining_job_success = DeclareMiningJobSuccess {
+                            request_id: msg.request_id,
+                            new_mining_job_token: activated_token
+                                .to_le_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("must always be valid B0_255"),
+                        };
+                        JobDeclaration::DeclareMiningJobSuccess(declare_mining_job_success)
+                    }
+                    None => {
+                        let declare_mining_job_error = DeclareMiningJobError {
+                            request_id: msg.request_id,
+                            error_code: ERROR_CODE_DECLARE_MINING_JOB_INVALID_MINING_JOB_TOKEN
+                                .as_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("error code string must be valid B0_255"),
+                            error_details: Vec::new()
+                                .try_into()
+                                .expect("empty array must be valid B0_64K"),
+                        };
+                        JobDeclaration::DeclareMiningJobError(declare_mining_job_error)
+                    }
+                }
             }
             // if job is invalid, return DeclareMiningJobError
             DeclareMiningJobResult::Error(error_code) => {
