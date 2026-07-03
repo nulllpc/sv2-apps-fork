@@ -1,3 +1,8 @@
+//! ## Pool Runtime Module
+//!
+//! Provides [`PoolRuntime`], a structured state-machine orchestrating the pool's
+//! initialization, bootstrap stages, background service loops, and graceful teardown.
+
 use std::{
     sync::{atomic::Ordering, Arc},
     thread::JoinHandle,
@@ -70,14 +75,16 @@ pub struct ChannelManagerReady {
 
 pub struct Running;
 
+/// The core coordinator of the Pool runtime, parameterized by its current bootstrap `State`.
+///
+/// It manages the lifecycle of essential sub-services and channels, ensuring resources
+/// are correctly initialized, passed to background executors, and cleanly torn down.
 pub struct PoolRuntime<State> {
     pool: PoolSv2,
     task_manager: Arc<TaskManager>,
     state: State,
-
     jd: Option<JobDeclarator>,
     bitcoin_core_sv2: Option<BitcoinCoreSv2Handle>,
-
     encoded_outputs: Vec<u8>,
     coinbase_outputs: Vec<TxOut>,
     #[cfg(feature = "monitoring")]
@@ -85,6 +92,10 @@ pub struct PoolRuntime<State> {
 }
 
 impl<State> PoolRuntime<State> {
+    /// Performs a coordinated, graceful shutdown of the runtime.
+    ///
+    /// Signals cancellation to all active sub-services and background tasks, awaiting
+    /// their clean termination up to a configured graceful timeout.
     pub async fn shutdown(mut self) {
         self.pool.cancellation_token.cancel();
 
@@ -552,6 +563,8 @@ impl PoolRuntime<TemplateProviderReady> {
 }
 
 impl PoolRuntime<ChannelManagerReady> {
+    /// Activates the background execution loop of the [`ChannelManager`], spawns the
+    /// downstream TCP listening server, and transitions the runtime to [`Running`].
     async fn start_services(
         self,
     ) -> Result<PoolRuntime<Running>, (PoolErrorKind, PoolRuntime<ChannelManagerReady>)> {

@@ -40,6 +40,19 @@ impl PoolSv2 {
         }
     }
 
+    /// Starts the Pool server and blocks asynchronously on the [`PoolRuntime`].
+    ///
+    /// The startup and execution sequence follows:
+    /// 1. **Initialize:** Sets up the pool runtime state machine.
+    /// 2. **Bootstrap:** Configures internal channels, starts the Job Declarator Server (JDS),
+    ///    connects to the Template Provider, and initializes the Channel Manager.
+    /// 3. **Run & Block:** Spawns active background loops/servers and blocks the caller while
+    ///    awaiting the runtime's shutdown signal (e.g., Ctrl+C or program cancellation).
+    /// 4. **Teardown:** Performs a coordinated graceful cleanup of all services and tasks,
+    ///    remaining blocked until all sub-services have exited.
+    ///
+    /// If any error occurs during bootstrapping, the runtime automatically initiates a
+    /// graceful shutdown of any partially initialized components before returning the error.
     pub async fn start(&self) -> Result<(), PoolErrorKind> {
         let runtime = PoolRuntime::<Init>::new(self.clone())?;
 
