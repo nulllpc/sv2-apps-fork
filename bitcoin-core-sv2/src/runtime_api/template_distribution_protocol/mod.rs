@@ -13,7 +13,7 @@
 //! enforces a minimum spacing between mempool-driven template updates.
 
 use crate::{
-    common::{BitcoinCoreSv2Error, BitcoinCoreSv2Protocol, BitcoinCoreVersion},
+    runtime_api::{BitcoinCoreSv2Error, BitcoinCoreSv2Protocol, BitcoinCoreVersion},
     unix_capnp::{v30x, v31x},
 };
 use async_channel::{Receiver, Sender};

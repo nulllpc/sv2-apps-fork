@@ -7,7 +7,7 @@
 
 use hex;
 use stratum_apps::{
-    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
+    bitcoin_core_sv2::CancellationToken,
     monitoring::{
         client::{ExtendedChannelInfo, StandardChannelInfo, Sv2ClientInfo, Sv2ClientsMonitoring},
         server::{ServerExtendedChannelInfo, ServerInfo, ServerMonitoring},

@@ -1643,7 +1643,7 @@ async fn non_aggregated_translator_correctly_deals_with_close_channel_message() 
     }
 
     // let's wait until all channels send at least one share
-    let mut channels_submitted_to: HashSet<u32> = (0..N_EXTENDED_CHANNELS).into_iter().collect();
+    let mut channels_submitted_to: HashSet<u32> = (0..N_EXTENDED_CHANNELS).collect();
     loop {
         sniffer
             .wait_for_message_type(
@@ -1946,8 +1946,7 @@ async fn translator_does_not_shutdown_on_missing_downstream_channel() {
         .await
         .unwrap();
 
-    let (_minerd_process, _minerd_addr) =
-        start_minerd(tproxy_addr.clone(), None, None, false).await;
+    let (_minerd_process, _minerd_addr) = start_minerd(tproxy_addr, None, None, false).await;
 
     sniffer_a
         .wait_for_message_type(

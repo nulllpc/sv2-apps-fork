@@ -2,7 +2,7 @@
 //! UNIX socket.
 
 use crate::{
-    common::job_declaration_protocol::io::JdRequest,
+    runtime_api::job_declaration_protocol::io::JdRequest,
     unix_capnp::v31x::job_declaration_protocol::{
         error::BitcoinCoreSv2JDPError, mempool::MempoolMirror,
     },

@@ -1,7 +1,7 @@
 //! Handlers for Bitcoin Core v31.x Sv2 Job Declaration Protocol via capnp over UNIX socket.
 
 use crate::{
-    common::job_declaration_protocol::io::{JdResponse, ValidationContext},
+    runtime_api::job_declaration_protocol::io::{JdResponse, ValidationContext},
     unix_capnp::v31x::job_declaration_protocol::{
         BitcoinCoreSv2JDP, mempool::decode_bip34_height_from_coinbase_script_sig,
     },

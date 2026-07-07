@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 use stratum_apps::{
-    bitcoin_core_sv2::common::BitcoinCoreVersion,
+    bitcoin_core_sv2::runtime_api::BitcoinCoreVersion,
     config_helpers::CoinbaseRewardScript,
     key_utils::{Secp256k1PublicKey, Secp256k1SecretKey},
     tp_type::TemplateProviderType,

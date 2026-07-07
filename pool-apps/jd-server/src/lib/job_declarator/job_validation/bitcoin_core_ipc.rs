@@ -15,7 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 use stratum_apps::{
-    bitcoin_core_sv2::common::{
+    bitcoin_core_sv2::runtime_api::{
         job_declaration_protocol::{
             self,
             io::{JdRequest, JdResponse, ValidationContext},

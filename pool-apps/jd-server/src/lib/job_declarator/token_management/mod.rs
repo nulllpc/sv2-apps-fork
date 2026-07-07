@@ -28,7 +28,7 @@ use std::{
     time::{Duration, Instant},
 };
 use stratum_apps::{
-    bitcoin_core_sv2::common::job_declaration_protocol::CancellationToken,
+    bitcoin_core_sv2::CancellationToken,
     task_manager::TaskManager,
     utils::types::{DownstreamId, JdToken},
 };

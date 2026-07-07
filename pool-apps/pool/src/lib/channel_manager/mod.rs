@@ -9,7 +9,7 @@ use std::{
 use async_channel::{unbounded, Receiver, Sender};
 use core::sync::atomic::Ordering;
 use stratum_apps::{
-    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
+    bitcoin_core_sv2::CancellationToken,
     channel_utils::ReceiverCleanup,
     coinbase_output_constraints::coinbase_output_constraints_message_with_offset,
     config_helpers::CoinbaseRewardScript,

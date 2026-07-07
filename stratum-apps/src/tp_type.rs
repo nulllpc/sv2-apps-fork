@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::config_helpers::opt_path_from_toml;
 
 #[cfg(feature = "bitcoin-core-sv2")]
-use bitcoin_core_sv2::common::BitcoinCoreVersion;
+use bitcoin_core_sv2::runtime_api::BitcoinCoreVersion;
 
 /// Bitcoin network for determining node.sock location
 #[derive(Clone, Debug, serde::Deserialize)]

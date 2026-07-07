@@ -16,13 +16,15 @@ use integration_tests_sv2::{
 };
 use std::time::Duration;
 use stratum_apps::{
-    bitcoin_core_sv2::common::{
-        job_declaration_protocol::{
-            self,
-            io::{JdRequest, JdResponse},
-            CancellationToken as JdpCancellationToken,
+    bitcoin_core_sv2::{
+        runtime_api::{
+            job_declaration_protocol::{
+                self,
+                io::{JdRequest, JdResponse},
+            },
+            BitcoinCoreVersion,
         },
-        BitcoinCoreVersion,
+        CancellationToken,
     },
     stratum_core::{
         bitcoin::{
@@ -65,7 +67,7 @@ async fn assert_jdp_io_integration_for_version(version: BitcoinCoreVersion) {
     let (incoming_sender, incoming_receiver) = async_channel::unbounded::<JdRequest>();
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
 
-    let cancellation_token = JdpCancellationToken::new();
+    let cancellation_token = CancellationToken::new();
     let cancellation_token_clone = cancellation_token.clone();
     let socket_path_clone = socket_path.clone();
 

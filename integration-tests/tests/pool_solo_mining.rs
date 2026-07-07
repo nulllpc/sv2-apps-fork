@@ -94,7 +94,7 @@ fn assert_payout_percentage(payout_info: &PayoutInfo, expected_percentages: &[(S
             .addresses
             .iter()
             .position(|a| a == addr)
-            .expect(&format!("Address {} not found in coinbase", addr));
+            .unwrap_or_else(|| panic!("Address {} not found in coinbase", addr));
         let actual_pct = (payout_info.amounts[idx] as f64 / payout_info.total as f64) * 100.0;
         assert!(
             (actual_pct - expected_pct).abs() < 0.1,
@@ -164,7 +164,7 @@ async fn pool_solo_mining_invalid_payout_address() {
     // === Standard Channel - invalid payout address ===
     let open_standard = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
         OpenStandardMiningChannel {
-            request_id: 0u32.into(),
+            request_id: 0u32,
             user_identity: "sri/solo/tb1qbalieiro/worker.1"
                 .to_string()
                 .try_into()
@@ -253,7 +253,7 @@ async fn pool_solo_mining_wrong_user_identity() {
     // === Standard Channel - missing keyword ===
     let open_standard = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
         OpenStandardMiningChannel {
-            request_id: 0u32.into(),
+            request_id: 0u32,
             user_identity: "sri/worker.1".try_into().unwrap(),
             nominal_hash_rate: 1000.0,
             max_target: [0xff; 32].into(),
@@ -430,7 +430,7 @@ async fn pool_solo_mining_random_user_identity() {
     // === Standard Channel - random user_identity ===
     let open_standard = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
         OpenStandardMiningChannel {
-            request_id: 0u32.into(),
+            request_id: 0u32,
             user_identity: "cool_miner/worker.1".try_into().unwrap(),
             nominal_hash_rate: 1000.0,
             max_target: [0xff; 32].into(),
@@ -594,7 +594,7 @@ async fn pool_solo_mining_legacy_pattern() {
     // === Standard Channel - legacy pattern ===
     let open_standard = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
         OpenStandardMiningChannel {
-            request_id: 0u32.into(),
+            request_id: 0u32,
             user_identity: MINER_COINBASE_REWARD_ADDR.try_into().unwrap(),
             nominal_hash_rate: 1000.0,
             max_target: [0xff; 32].into(),
@@ -760,7 +760,7 @@ async fn pool_solo_mining_solo_pattern() {
     // === Standard Channel - sri/solo pattern ===
     let open_standard = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
         OpenStandardMiningChannel {
-            request_id: 0u32.into(),
+            request_id: 0u32,
             user_identity: format!("sri/solo/{}/worker.1", MINER_COINBASE_REWARD_ADDR)
                 .try_into()
                 .unwrap(),
@@ -926,7 +926,7 @@ async fn pool_solo_mining_full_donate() {
     // === Standard Channel - sri/donate ===
     let open_standard = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
         OpenStandardMiningChannel {
-            request_id: 0u32.into(),
+            request_id: 0u32,
             user_identity: "sri/donate/worker.1".try_into().unwrap(),
             nominal_hash_rate: 1000.0,
             max_target: [0xff; 32].into(),
@@ -1090,7 +1090,7 @@ async fn pool_solo_mining_full_donate_no_worker_name() {
     // === Standard Channel - sri/donate (no worker name) ===
     let open_standard = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
         OpenStandardMiningChannel {
-            request_id: 0u32.into(),
+            request_id: 0u32,
             user_identity: "sri/donate".try_into().unwrap(),
             nominal_hash_rate: 1000.0,
             max_target: [0xff; 32].into(),
@@ -1277,7 +1277,7 @@ async fn pool_solo_mining_partial_donation() {
     // === Standard Channel - sri/donate/5% ===
     let open_standard = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
         OpenStandardMiningChannel {
-            request_id: 0u32.into(),
+            request_id: 0u32,
             user_identity: user_identity.try_into().unwrap(),
             nominal_hash_rate: 1000.0,
             max_target: vec![0xff; 32].try_into().unwrap(),
