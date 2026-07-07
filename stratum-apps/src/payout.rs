@@ -2,9 +2,9 @@
 //!
 //! This module is meant for applications that accept SRI-style mining identities and need a
 //! single source of truth for reward distribution. Pool-like applications can use
-//! [`crate::payout::PayoutMode::coinbase_outputs`] to build outputs, while proxy/client applications can use
-//! [`crate::payout::PayoutMode::validate_coinbase_outputs`] or [`crate::payout::PayoutMode::validate_coinbase_tx_parts`] to
-//! verify upstream jobs.
+//! [`crate::payout::PayoutMode::coinbase_outputs`] to build outputs, while proxy/client
+//! applications can use [`crate::payout::PayoutMode::validate_coinbase_outputs`] or
+//! [`crate::payout::PayoutMode::validate_coinbase_tx_parts`] to verify upstream jobs.
 
 use std::fmt;
 
@@ -34,7 +34,8 @@ pub enum PayoutMode {
         /// Miner payout script.
         script: CoinbaseRewardScript,
     },
-    /// Legacy solo mode: miner payout address must receive at least 90% of spendable coinbase outputs.
+    /// Legacy solo mode: miner payout address must receive at least 90% of spendable coinbase
+    /// outputs.
     LegacySolo {
         /// Miner payout address as supplied in `user_identity`.
         address: String,
@@ -171,10 +172,12 @@ impl PayoutMode {
     ///
     /// The SV2 split only guarantees that `coinbase_tx_suffix` is the part after the full
     /// extranonce. The suffix can still contain remaining coinbase scriptSig bytes before the input
-    /// sequence, so this reconstructs and deserializes the full transaction before checking outputs.
+    /// sequence, so this reconstructs and deserializes the full transaction before checking
+    /// outputs.
     ///
     /// The extranonce bytes are zero-filled because payout verification only needs the transaction
-    /// to decode and expose its outputs; the actual extranonce value does not affect the output set.
+    /// to decode and expose its outputs; the actual extranonce value does not affect the output
+    /// set.
     pub fn validate_coinbase_tx_parts(
         &self,
         coinbase_tx_prefix: &[u8],

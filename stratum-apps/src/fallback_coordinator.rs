@@ -16,8 +16,8 @@ use tokio_util::sync::CancellationToken;
 /// - call [`FallbackHandler::done`] at task completion
 ///
 /// when a fallback trigger arrives to the main status loop, we MUST call
-/// [`FallbackCoordinator::trigger_fallback_and_wait`] to wait for all registered components to complete
-/// their cleanup before re-initializing them under the new upstream server.
+/// [`FallbackCoordinator::trigger_fallback_and_wait`] to wait for all registered components to
+/// complete their cleanup before re-initializing them under the new upstream server.
 ///
 /// finally, a new [`FallbackCoordinator`] must be instantiated for the next fallback cycle.
 #[derive(Debug, Clone)]

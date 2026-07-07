@@ -13,8 +13,14 @@
 //!
 //! `BitcoinCoreSv2TDP` will not start distributing new templates until it receives the first
 //! `CoinbaseOutputConstraints` message.
+//!
+//! This example is pinned to Bitcoin Core v31.x, although it can be adapted to work with other
+//! versions.
 
-use bitcoin_core_sv2::unix_capnp::v31x::template_distribution_protocol::BitcoinCoreSv2TDP;
+use bitcoin_core_sv2::runtime_api::{
+    BitcoinCoreVersion,
+    template_distribution_protocol::{self, BitcoinCoreSv2TDP},
+};
 use std::path::Path;
 
 use async_channel::unbounded;
@@ -77,7 +83,9 @@ async fn main() {
 
         tokio_local_set.block_on(&rt, async move {
             // create a new `BitcoinCoreSv2TDP` instance
-            let mut sv2_bitcoin_core = match BitcoinCoreSv2TDP::new(
+            let mut sv2_bitcoin_core: BitcoinCoreSv2TDP = match template_distribution_protocol::new(
+                // Change this line to select a different supported Bitcoin Core major version.
+                BitcoinCoreVersion::V31X,
                 &bitcoin_core_unix_socket_path_clone,
                 fee_threshold,
                 min_interval,
