@@ -31,11 +31,11 @@ jobs:
       - name: Login
         run: cargo login ${{ secrets.CRATES_IO_DEPLOY_KEY }}
 
-      - name: Publish stratum-apps crate
-        run: ./scripts/release-apps.sh stratum-apps
-
       - name: Publish bitcoin-core-sv2 crate
         run: ./scripts/release-apps.sh bitcoin-core-sv2
+
+      - name: Publish stratum-apps crate
+        run: ./scripts/release-apps.sh stratum-apps
 
       - name: Publish jd-client-sv2 crate
         run: ./scripts/release-apps.sh miner-apps/jd-client
