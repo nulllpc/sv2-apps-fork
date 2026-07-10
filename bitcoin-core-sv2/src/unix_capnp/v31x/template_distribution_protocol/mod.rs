@@ -653,9 +653,15 @@ impl BitcoinCoreSv2TDP {
         Ok(wait_next_request)
     }
 
-    // spawns a task that processes the stale template data after 10s
-    // we wait 10s in case there's any incoming RequestTransactionData referring to stale templates
-    // immediately after the chain tip change
+    // Spawns a task that processes stale template data after a 10-second grace period.
+    //
+    // The grace period allows in-flight RequestTransactionData and SubmitSolution requests
+    // to complete before the template data is retired. After the 10-second window:
+    // - Stale template IDs are written to stale_template_ids, causing
+    //   handle_request_transaction_data to return an error.
+    // - Stale entries are removed from template_data, causing both handle_request_transaction_data
+    //   and handle_submit_solution to return errors.
+    // - The underlying IPC client capabilities are released via destroy_ipc_client.
     async fn process_stale_template_data(&self, stale_template_ids: HashSet<u64>) {
         let self_clone = self.clone();
         tokio::task::spawn_local(async move {
