@@ -43,6 +43,11 @@ impl BitcoinCoreSv2TDP {
             }
         }
 
+        // Capture the current template IDs after the old monitor has exited and
+        // before bootstrapping the new IPC client. This guarantees the snapshot
+        // only contains templates from the previous constraints epoch.
+        let stale_template_ids = self.current_template_ids()?;
+
         self.template_ipc_client_cancellation_token = CancellationToken::new();
         debug!("Created new template_ipc_client_cancellation_token");
 
@@ -55,6 +60,13 @@ impl BitcoinCoreSv2TDP {
             error!("Failed to bootstrap new template IPC client: {:?}", e);
             e
         })?;
+
+        // Retire templates created under previous constraints after the new client
+        // is live. Without this, old template IDs remain usable indefinitely and
+        // accumulate one live template capability per constraints update.
+        if !stale_template_ids.is_empty() {
+            self.process_stale_template_data(stale_template_ids).await;
+        }
 
         debug!("Spawning new monitor_ipc_templates() task");
         self.monitor_ipc_templates();
