@@ -1,6 +1,6 @@
 //! ## Error Module
 //!
-//! Defines [`Error`], the central error enum used throughout the Job Declarator Client (JDC).
+//! Defines [`JDCError`], the central error struct used throughout the Job Declarator Client (JDC).
 //!
 //! It unifies errors from:
 //! - I/O operations

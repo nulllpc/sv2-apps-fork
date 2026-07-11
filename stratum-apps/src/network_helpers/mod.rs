@@ -3,9 +3,9 @@
 //! This module provides connection management, encrypted streams, and protocol handling
 //! for Stratum V2 applications. It includes support for:
 //!
-//! - Noise-encrypted connections ([`noise_connection`], [`noise_stream`])
-//! - SV1 protocol connections ([`sv1_connection`]) - when `sv1` feature is enabled
-//! - Hostname resolution ([`resolve_hostname`])
+//! - Noise-encrypted connections ([`crate::network_helpers::noise_connection`], [`crate::network_helpers::noise_stream`])
+//! - SV1 protocol connections (`sv1_connection`) - when `sv1` feature is enabled
+//! - Hostname resolution ([`crate::network_helpers::resolve_hostname`])
 //!
 //! Originally from the `network_helpers_sv2` crate.
 
@@ -111,7 +111,7 @@ pub const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Connects to an upstream server as a Noise initiator, returning the split read/write halves.
 ///
-/// The handshake timeout is opinionated and fixed at [`NOISE_HANDSHAKE_TIMEOUT`]. If you need a
+/// The handshake timeout is opinionated and fixed at `NOISE_HANDSHAKE_TIMEOUT`. If you need a
 /// custom timeout, use [`noise_stream::NoiseTcpStream::new`] directly.
 ///
 /// Pass `Some(key)` to verify the server's authority public key, or `None` to skip
@@ -138,7 +138,7 @@ where
 
 /// Accepts a downstream connection as a Noise responder, returning the split read/write halves.
 ///
-/// The handshake timeout is opinionated and fixed at [`NOISE_HANDSHAKE_TIMEOUT`]. If you need a
+/// The handshake timeout is opinionated and fixed at `NOISE_HANDSHAKE_TIMEOUT`. If you need a
 /// custom timeout, use [`noise_stream::NoiseTcpStream::new`] directly.
 ///
 /// `cert_validity` controls how long the generated Noise certificate is valid,

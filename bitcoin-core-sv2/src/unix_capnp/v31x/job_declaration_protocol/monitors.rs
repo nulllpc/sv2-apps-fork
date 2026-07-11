@@ -8,7 +8,7 @@ use tracing::{debug, error, warn};
 
 impl BitcoinCoreSv2JDP {
     /// Spawns a `spawn_local` task that issues `waitNext` requests to Bitcoin Core and
-    /// refreshes the [`MempoolMirror`](super::mempool::MempoolMirror) whenever the template
+    /// refreshes the `MempoolMirror` whenever the template
     /// changes. Returns the [`JoinHandle`] so the caller can await clean shutdown.
     pub fn monitor_and_update_mempool_mirror(&self) -> JoinHandle<()> {
         let self_clone = self.clone();

@@ -5,7 +5,7 @@
 //!
 //! This module handles:
 //! - Initializing [`PoolConfig`]
-//! - Managing [`TemplateProviderConfig`], [`AuthorityConfig`], [`CoinbaseOutput`], and
+//! - Managing [`TemplateProviderType`], [`AuthorityConfig`], [`CoinbaseRewardScript`], and
 //!   [`ConnectionConfig`]
 //! - Validating and converting coinbase outputs
 use std::{

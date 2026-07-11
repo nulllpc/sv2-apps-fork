@@ -85,7 +85,7 @@ impl Sv2Tp {
     /// - Performs Noise handshake
     /// - Spawns IO tasks for inbound/outbound frames
     ///
-    /// Retries up to 3 times before returning [`PoolError::Shutdown`].
+    /// Retries up to 3 times before returning [`PoolError::shutdown`].
     pub async fn new(
         tp_address: String,
         public_key: Option<Secp256k1PublicKey>,

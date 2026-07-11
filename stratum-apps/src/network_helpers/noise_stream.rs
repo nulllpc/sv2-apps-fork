@@ -74,8 +74,8 @@ where
     ///
     /// On success, returns a stream with encrypted communication channels.
     ///
-    /// `timeout` applies to each individual handshake read. Prefer [`super::connect`] or
-    /// [`super::accept`]. For typical use. They apply a sensible default timeout automatically.
+    /// `timeout` applies to each individual handshake read. Prefer [`super::connect_with_noise`] or
+    /// [`super::accept_noise_connection`]. For typical use. They apply a sensible default timeout automatically.
     pub async fn new(
         stream: TcpStream,
         role: HandshakeRole,

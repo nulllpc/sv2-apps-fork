@@ -33,7 +33,7 @@ const DEFAULT_RETRIES: usize = 5;
 /// Builder for [`MonitoringApi`]. Created via [`MonitoringApi::builder`].
 ///
 /// Unset knobs fall back to the module-level defaults
-/// ([`DEFAULT_RETRIES`], [`DEFAULT_REQUEST_TIMEOUT`]).
+/// (`DEFAULT_RETRIES`, `DEFAULT_REQUEST_TIMEOUT`).
 #[derive(Debug, Clone, Copy)]
 pub struct MonitoringApiBuilder {
     addr: SocketAddr,
@@ -74,7 +74,7 @@ impl MonitoringApiBuilder {
 
 impl MonitoringApi {
     /// Start a builder for a client at `addr`. Knobs default to
-    /// [`DEFAULT_RETRIES`] retries and [`DEFAULT_REQUEST_TIMEOUT`] per request;
+    /// `DEFAULT_RETRIES` retries and `DEFAULT_REQUEST_TIMEOUT` per request;
     /// see [`MonitoringApiBuilder`] for overrides.
     pub fn builder(addr: SocketAddr) -> MonitoringApiBuilder {
         MonitoringApiBuilder::new(addr)

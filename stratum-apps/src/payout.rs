@@ -2,8 +2,8 @@
 //!
 //! This module is meant for applications that accept SRI-style mining identities and need a
 //! single source of truth for reward distribution. Pool-like applications can use
-//! [`PayoutMode::coinbase_outputs`] to build outputs, while proxy/client applications can use
-//! [`PayoutMode::validate_coinbase_outputs`] or [`PayoutMode::validate_coinbase_tx_suffix`] to
+//! [`crate::payout::PayoutMode::coinbase_outputs`] to build outputs, while proxy/client applications can use
+//! [`crate::payout::PayoutMode::validate_coinbase_outputs`] or [`crate::payout::PayoutMode::validate_coinbase_tx_suffix`] to
 //! verify upstream jobs.
 
 use std::fmt;

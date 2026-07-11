@@ -40,7 +40,7 @@ impl PoolSv2 {
         }
     }
 
-    /// Starts the Pool server and blocks asynchronously on the [`PoolRuntime`].
+    /// Starts the Pool server and blocks asynchronously on the `PoolRuntime`.
     ///
     /// The startup and execution sequence follows:
     /// 1. **Initialize:** Sets up the pool runtime state machine.
