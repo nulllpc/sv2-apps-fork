@@ -129,25 +129,52 @@ async fn translator_mines_when_payout_matches_address_or_donation_identity() {
     partial_donation_coinbase_tx_suffix.extend(serialize(&vec![
         TxOut {
             value: Amount::from_sat(500_000_000),
-            script_pubkey: pool_script_pubkey,
+            script_pubkey: pool_script_pubkey.clone(),
         },
         TxOut {
             value: Amount::from_sat(4_500_000_000),
-            script_pubkey: miner_script_pubkey,
+            script_pubkey: miner_script_pubkey.clone(),
         },
     ]));
     partial_donation_coinbase_tx_suffix.extend([0, 0, 0, 0]);
 
-    for (identifier, user_identity, coinbase_tx_suffix) in [
+    // Simulates pools that leave extra coinbase scriptSig bytes after the extranonce.
+    let mut suffix_with_remaining_scriptsig_bytes =
+        hex::decode("2f4e65787573506f6f6c2ffeffffff").unwrap();
+    suffix_with_remaining_scriptsig_bytes.extend(serialize(&vec![
+        TxOut {
+            value: Amount::from_sat(4_955_000_000),
+            script_pubkey: miner_script_pubkey,
+        },
+        TxOut {
+            value: Amount::from_sat(45_000_000),
+            script_pubkey: pool_script_pubkey,
+        },
+    ]));
+    suffix_with_remaining_scriptsig_bytes.extend([0, 0, 0, 0]);
+
+    let default_coinbase_tx_prefix = hex::decode("02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff225200162f5374726174756d2056322053524920506f6f6c2f2f08").unwrap();
+    // Extra `/NexusPool/` scriptSig bytes increase the prefix scriptSig length from 0x22 to 0x2d.
+    let coinbase_tx_prefix_with_remaining_scriptsig_bytes = hex::decode("02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff2d5200162f5374726174756d2056322053524920506f6f6c2f2f08").unwrap();
+
+    for (identifier, user_identity, coinbase_tx_prefix, coinbase_tx_suffix) in [
         (
             "payout-address",
             PAYOUT_VERIFICATION_MINER_ADDRESS.to_string(),
+            default_coinbase_tx_prefix.clone(),
             legacy_solo_coinbase_tx_suffix,
         ),
         (
             "payout-donation",
             format!("sri/donate/10/{PAYOUT_VERIFICATION_MINER_ADDRESS}/worker"),
+            default_coinbase_tx_prefix,
             partial_donation_coinbase_tx_suffix,
+        ),
+        (
+            "payout-address-scriptsig-suffix",
+            PAYOUT_VERIFICATION_MINER_ADDRESS.to_string(),
+            coinbase_tx_prefix_with_remaining_scriptsig_bytes,
+            suffix_with_remaining_scriptsig_bytes,
         ),
     ] {
         let mock_upstream_addr = get_available_address();
@@ -211,16 +238,18 @@ async fn translator_mines_when_payout_matches_address_or_donation_identity() {
             .unwrap();
 
         send_to_tproxy
-            .send(AnyMessage::Mining(parsers_sv2::Mining::NewExtendedMiningJob(NewExtendedMiningJob {
-                channel_id: 0,
-                job_id: 1,
-                min_ntime: Sv2Option::new(None),
-                version: 0x20000000,
-                version_rolling_allowed: true,
-                merkle_path: Seq0255::new(vec![]).unwrap(),
-                coinbase_tx_prefix: hex::decode("02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff225200162f5374726174756d2056322053524920506f6f6c2f2f08").unwrap().try_into().unwrap(),
-                coinbase_tx_suffix: coinbase_tx_suffix.try_into().unwrap(),
-            })))
+            .send(AnyMessage::Mining(
+                parsers_sv2::Mining::NewExtendedMiningJob(NewExtendedMiningJob {
+                    channel_id: 0,
+                    job_id: 1,
+                    min_ntime: Sv2Option::new(None),
+                    version: 0x20000000,
+                    version_rolling_allowed: true,
+                    merkle_path: Seq0255::new(vec![]).unwrap(),
+                    coinbase_tx_prefix: coinbase_tx_prefix.try_into().unwrap(),
+                    coinbase_tx_suffix: coinbase_tx_suffix.try_into().unwrap(),
+                }),
+            ))
             .await
             .unwrap();
         sniffer

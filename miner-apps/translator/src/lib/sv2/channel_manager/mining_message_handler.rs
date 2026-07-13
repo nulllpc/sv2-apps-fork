@@ -547,14 +547,6 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
         _tlv_fields: Option<&[Tlv]>,
     ) -> Result<(), Self::Error> {
         info!("Received: {}", m);
-        if let Some(expected_payout_distribution) = self.expected_payout_distribution() {
-            expected_payout_distribution
-                .validate_coinbase_tx_suffix(m.coinbase_tx_suffix.as_bytes())
-                .map_err(|e| {
-                    error!("NewExtendedMiningJob failed payout verification: {e}");
-                    TproxyError::fallback(TproxyErrorKind::PayoutVerificationFailed(e.to_string()))
-                })?;
-        }
         let m_static = m.clone().into_static();
 
         // we update the channel states and keep track of the messages that need to be sent to the
@@ -565,11 +557,16 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
             // are we in aggregated mode?
             if self.mode.is_aggregated() {
                 // Validate that the message is for the aggregated channel or its group
-                let aggregated_channel_id = self
-                    .extended_channels
-                    .get(&AGGREGATED_CHANNEL_ID)
-                    .ok_or(TproxyError::fallback(TproxyErrorKind::ChannelNotFound))?
-                    .get_channel_id();
+                let (aggregated_channel_id, full_extranonce_size) = {
+                    let aggregated_channel = self
+                        .extended_channels
+                        .get(&AGGREGATED_CHANNEL_ID)
+                        .ok_or(TproxyError::fallback(TproxyErrorKind::ChannelNotFound))?;
+                    (
+                        aggregated_channel.get_channel_id(),
+                        aggregated_channel.get_full_extranonce_size(),
+                    )
+                };
 
                 // here, we are assuming that since we are in aggregated mode, there should
                 // be only one single group channel and the
@@ -586,6 +583,8 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
                 if aggregated_channel_id == m_static.channel_id
                     || group_channel_id == m_static.channel_id
                 {
+                    self.verify_payout_distribution(&m_static, full_extranonce_size)?;
+
                     // update all extended channel states
                     for mut extended_channel in self.extended_channels.iter_mut() {
                         extended_channel
@@ -617,6 +616,13 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
             // we're not in aggregated mode
             // was the message sent to a group channel?
             } else if let Some(mut group_channel) = self.group_channels.get_mut(&m.channel_id) {
+                let full_extranonce_size =
+                    group_channel.get_full_extranonce_size().ok_or_else(|| {
+                        error!("Group channel {} has no full extranonce size", m.channel_id);
+                        TproxyError::fallback(TproxyErrorKind::ChannelNotFound)
+                    })?;
+                self.verify_payout_distribution(&m_static, full_extranonce_size)?;
+
                 // update group channel state
                 group_channel.on_new_extended_mining_job(m_static.clone());
 
@@ -657,6 +663,8 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
                     );
                     return Err(TproxyError::log(TproxyErrorKind::ChannelNotFound));
                 };
+
+                self.verify_payout_distribution(&m_static, channel.get_full_extranonce_size())?;
 
                 // update channel state
                 channel
@@ -1097,6 +1105,30 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
                 self.group_channels
                     .insert(m.group_channel_id, group_channel);
             }
+        }
+
+        Ok(())
+    }
+}
+
+impl ChannelManager {
+    #[allow(clippy::result_large_err)]
+    fn verify_payout_distribution(
+        &self,
+        job: &NewExtendedMiningJob<'_>,
+        full_extranonce_size: usize,
+    ) -> Result<(), TproxyError<error::ChannelManager>> {
+        if let Some(expected_payout_distribution) = self.expected_payout_distribution() {
+            expected_payout_distribution
+                .validate_coinbase_tx_parts(
+                    job.coinbase_tx_prefix.as_bytes(),
+                    job.coinbase_tx_suffix.as_bytes(),
+                    full_extranonce_size,
+                )
+                .map_err(|e| {
+                    error!("NewExtendedMiningJob failed payout verification: {e}");
+                    TproxyError::fallback(TproxyErrorKind::PayoutVerificationFailed(e.to_string()))
+                })?;
         }
 
         Ok(())
