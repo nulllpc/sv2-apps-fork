@@ -3,14 +3,14 @@
 //! This module is meant for applications that accept SRI-style mining identities and need a
 //! single source of truth for reward distribution. Pool-like applications can use
 //! [`crate::payout::PayoutMode::coinbase_outputs`] to build outputs, while proxy/client applications can use
-//! [`crate::payout::PayoutMode::validate_coinbase_outputs`] or [`crate::payout::PayoutMode::validate_coinbase_tx_suffix`] to
+//! [`crate::payout::PayoutMode::validate_coinbase_outputs`] or [`crate::payout::PayoutMode::validate_coinbase_tx_parts`] to
 //! verify upstream jobs.
 
 use std::fmt;
 
 use crate::{
     config_helpers::CoinbaseRewardScript,
-    stratum_core::bitcoin::{consensus::Decodable, Amount, ScriptBuf, TxOut},
+    stratum_core::bitcoin::{consensus::deserialize, Amount, ScriptBuf, Transaction, TxOut},
 };
 
 // Legacy solo identities do not encode a fee policy, so allow at most a 10% service fee.
@@ -167,22 +167,31 @@ impl PayoutMode {
         Ok(())
     }
 
-    /// Verifies a `NewExtendedMiningJob.coinbase_tx_suffix` against this payout mode.
+    /// Verifies `NewExtendedMiningJob` coinbase transaction parts against this payout mode.
     ///
-    /// The suffix starts with the coinbase input sequence, followed by the serialized output vector
-    /// and locktime. This helper decodes the output vector and delegates to
-    /// [`PayoutMode::validate_coinbase_outputs`].
-    pub fn validate_coinbase_tx_suffix(
+    /// The SV2 split only guarantees that `coinbase_tx_suffix` is the part after the full
+    /// extranonce. The suffix can still contain remaining coinbase scriptSig bytes before the input
+    /// sequence, so this reconstructs and deserializes the full transaction before checking outputs.
+    ///
+    /// The extranonce bytes are zero-filled because payout verification only needs the transaction
+    /// to decode and expose its outputs; the actual extranonce value does not affect the output set.
+    pub fn validate_coinbase_tx_parts(
         &self,
+        coinbase_tx_prefix: &[u8],
         coinbase_tx_suffix: &[u8],
+        full_extranonce_size: usize,
     ) -> Result<(), PayoutValidationError> {
-        let Some(outputs_bytes) = coinbase_tx_suffix.get(4..) else {
-            return Err(PayoutValidationError::CoinbaseTxSuffixTooShort);
-        };
-        let outputs = Vec::<TxOut>::consensus_decode(&mut &outputs_bytes[..])
-            .map_err(|e| PayoutValidationError::DecodeCoinbaseOutputs(e.to_string()))?;
+        let mut coinbase = Vec::with_capacity(
+            coinbase_tx_prefix.len() + full_extranonce_size + coinbase_tx_suffix.len(),
+        );
+        coinbase.extend_from_slice(coinbase_tx_prefix);
+        coinbase.resize(coinbase.len() + full_extranonce_size, 0);
+        coinbase.extend_from_slice(coinbase_tx_suffix);
 
-        self.validate_coinbase_outputs(&outputs)
+        let coinbase: Transaction = deserialize(&coinbase)
+            .map_err(|e| PayoutValidationError::DecodeCoinbaseTransaction(e.to_string()))?;
+
+        self.validate_coinbase_outputs(&coinbase.output)
     }
 
     fn miner_address(&self) -> Option<&str> {
@@ -394,10 +403,8 @@ pub enum PayoutValidationError {
         /// Actual amount paid to the miner script in satoshis.
         actual_sats: u64,
     },
-    /// `NewExtendedMiningJob.coinbase_tx_suffix` was too short to contain outputs.
-    CoinbaseTxSuffixTooShort,
-    /// Failed to decode serialized coinbase outputs.
-    DecodeCoinbaseOutputs(String),
+    /// Failed to decode the reconstructed coinbase transaction.
+    DecodeCoinbaseTransaction(String),
 }
 
 impl fmt::Display for PayoutValidationError {
@@ -414,11 +421,8 @@ impl fmt::Display for PayoutValidationError {
                 f,
                 "coinbase payout mismatch for {address}: expected {expected_sats} sats ({expected_percentage}% of {total_spendable_sats} spendable sats), found {actual_sats} sats"
             ),
-            Self::CoinbaseTxSuffixTooShort => {
-                write!(f, "coinbase_tx_suffix is too short to contain an input sequence")
-            }
-            Self::DecodeCoinbaseOutputs(e) => {
-                write!(f, "failed to decode coinbase outputs: {e}")
+            Self::DecodeCoinbaseTransaction(e) => {
+                write!(f, "failed to decode coinbase transaction: {e}")
             }
         }
     }
@@ -454,6 +458,7 @@ mod tests {
     const MINER_ADDRESS: &str = "bc1qtzqxqaxyy6lda2fhdtp5dp0v56vlf6g0tljy2x";
     const OTHER_ADDRESS: &str = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";
     const TESTNET_ADDRESS: &str = "tb1qa0sm0hxzj0x25rh8gw5xlzwlsfvvyz8u96w3p8";
+    const FULL_EXTRANONCE_SIZE: usize = 8;
 
     fn tx_out(value: u64, address: &str) -> TxOut {
         TxOut {
@@ -462,11 +467,35 @@ mod tests {
         }
     }
 
-    fn coinbase_suffix(outputs: Vec<TxOut>) -> Vec<u8> {
-        let mut suffix = vec![0xff, 0xff, 0xff, 0xff];
+    fn coinbase_tx_parts(outputs: Vec<TxOut>, script_sig_suffix: &[u8]) -> (Vec<u8>, Vec<u8>) {
+        let script_sig_prefix = [0x03, 0x01, 0x02, 0x03];
+        let script_sig_len =
+            script_sig_prefix.len() + FULL_EXTRANONCE_SIZE + script_sig_suffix.len();
+        assert!(script_sig_len < 0xfd);
+
+        let mut prefix = Vec::new();
+        prefix.extend([0x02, 0x00, 0x00, 0x00]);
+        prefix.push(0x01);
+        prefix.extend([0; 32]);
+        prefix.extend([0xff, 0xff, 0xff, 0xff]);
+        prefix.push(script_sig_len as u8);
+        prefix.extend(script_sig_prefix);
+
+        let mut suffix = Vec::new();
+        suffix.extend(script_sig_suffix);
+        suffix.extend([0xff, 0xff, 0xff, 0xff]);
         suffix.extend(serialize(&outputs));
         suffix.extend([0, 0, 0, 0]);
-        suffix
+
+        (prefix, suffix)
+    }
+
+    fn validate_tx_outputs(
+        expected: &PayoutMode,
+        outputs: Vec<TxOut>,
+    ) -> Result<(), PayoutValidationError> {
+        let (prefix, suffix) = coinbase_tx_parts(outputs, &[]);
+        expected.validate_coinbase_tx_parts(&prefix, &suffix, FULL_EXTRANONCE_SIZE)
     }
 
     #[test]
@@ -592,18 +621,20 @@ mod tests {
     fn validates_full_solo_distribution() {
         let expected =
             PayoutMode::try_from(format!("sri/solo/{MINER_ADDRESS}/w1").as_str()).unwrap();
-        let suffix = coinbase_suffix(vec![tx_out(1_000, MINER_ADDRESS)]);
 
-        expected.validate_coinbase_tx_suffix(&suffix).unwrap();
+        validate_tx_outputs(&expected, vec![tx_out(1_000, MINER_ADDRESS)]).unwrap();
     }
 
     #[test]
     fn rejects_full_solo_distribution_with_other_spendable_output() {
         let expected =
             PayoutMode::try_from(format!("sri/solo/{MINER_ADDRESS}/w1").as_str()).unwrap();
-        let suffix = coinbase_suffix(vec![tx_out(900, MINER_ADDRESS), tx_out(100, OTHER_ADDRESS)]);
 
-        let err = expected.validate_coinbase_tx_suffix(&suffix).unwrap_err();
+        let err = validate_tx_outputs(
+            &expected,
+            vec![tx_out(900, MINER_ADDRESS), tx_out(100, OTHER_ADDRESS)],
+        )
+        .unwrap_err();
 
         assert!(matches!(
             err,
@@ -618,17 +649,23 @@ mod tests {
     #[test]
     fn validates_legacy_solo_distribution_with_service_fee_output() {
         let expected = PayoutMode::try_from(format!("{MINER_ADDRESS}.w1").as_str()).unwrap();
-        let suffix = coinbase_suffix(vec![tx_out(991, MINER_ADDRESS), tx_out(9, OTHER_ADDRESS)]);
 
-        expected.validate_coinbase_tx_suffix(&suffix).unwrap();
+        validate_tx_outputs(
+            &expected,
+            vec![tx_out(991, MINER_ADDRESS), tx_out(9, OTHER_ADDRESS)],
+        )
+        .unwrap();
     }
 
     #[test]
     fn rejects_legacy_solo_distribution_below_minimum() {
         let expected = PayoutMode::try_from(format!("{MINER_ADDRESS}.w1").as_str()).unwrap();
-        let suffix = coinbase_suffix(vec![tx_out(899, MINER_ADDRESS), tx_out(101, OTHER_ADDRESS)]);
 
-        let err = expected.validate_coinbase_tx_suffix(&suffix).unwrap_err();
+        let err = validate_tx_outputs(
+            &expected,
+            vec![tx_out(899, MINER_ADDRESS), tx_out(101, OTHER_ADDRESS)],
+        )
+        .unwrap_err();
 
         assert!(matches!(
             err,
@@ -644,9 +681,8 @@ mod tests {
     #[test]
     fn rejects_legacy_solo_distribution_without_miner_address() {
         let expected = PayoutMode::try_from(format!("{MINER_ADDRESS}.w1").as_str()).unwrap();
-        let suffix = coinbase_suffix(vec![tx_out(1_000, OTHER_ADDRESS)]);
 
-        let err = expected.validate_coinbase_tx_suffix(&suffix).unwrap_err();
+        let err = validate_tx_outputs(&expected, vec![tx_out(1_000, OTHER_ADDRESS)]).unwrap_err();
 
         assert!(matches!(
             err,
@@ -664,18 +700,24 @@ mod tests {
     fn validates_partial_donation_distribution() {
         let expected =
             PayoutMode::try_from(format!("sri/donate/10/{MINER_ADDRESS}/w1").as_str()).unwrap();
-        let suffix = coinbase_suffix(vec![tx_out(100, OTHER_ADDRESS), tx_out(900, MINER_ADDRESS)]);
 
-        expected.validate_coinbase_tx_suffix(&suffix).unwrap();
+        validate_tx_outputs(
+            &expected,
+            vec![tx_out(100, OTHER_ADDRESS), tx_out(900, MINER_ADDRESS)],
+        )
+        .unwrap();
     }
 
     #[test]
     fn rejects_wrong_partial_donation_distribution() {
         let expected =
             PayoutMode::try_from(format!("sri/donate/10/{MINER_ADDRESS}/w1").as_str()).unwrap();
-        let suffix = coinbase_suffix(vec![tx_out(200, OTHER_ADDRESS), tx_out(800, MINER_ADDRESS)]);
 
-        let err = expected.validate_coinbase_tx_suffix(&suffix).unwrap_err();
+        let err = validate_tx_outputs(
+            &expected,
+            vec![tx_out(200, OTHER_ADDRESS), tx_out(800, MINER_ADDRESS)],
+        )
+        .unwrap_err();
 
         assert!(matches!(
             err,
@@ -690,8 +732,20 @@ mod tests {
     #[test]
     fn full_donation_has_no_miner_payout_to_verify() {
         let expected = PayoutMode::FullDonation;
-        let suffix = coinbase_suffix(vec![tx_out(1_000, OTHER_ADDRESS)]);
 
-        expected.validate_coinbase_tx_suffix(&suffix).unwrap();
+        validate_tx_outputs(&expected, vec![tx_out(1_000, OTHER_ADDRESS)]).unwrap();
+    }
+
+    #[test]
+    fn validates_coinbase_with_remaining_scriptsig_bytes_after_extranonce() {
+        let expected = PayoutMode::try_from(format!("{MINER_ADDRESS}.w1").as_str()).unwrap();
+        let (prefix, suffix) = coinbase_tx_parts(
+            vec![tx_out(1_000, MINER_ADDRESS), tx_out(1, OTHER_ADDRESS)],
+            b"/NexusPool/",
+        );
+
+        expected
+            .validate_coinbase_tx_parts(&prefix, &suffix, FULL_EXTRANONCE_SIZE)
+            .unwrap();
     }
 }
