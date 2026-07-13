@@ -39,7 +39,7 @@ use crate::{
     },
 };
 
-pub struct Io {
+struct Io {
     downstream_to_channel_manager_sender: Sender<(DownstreamId, Mining<'static>, Option<Vec<Tlv>>)>,
     downstream_to_channel_manager_receiver:
         Receiver<(DownstreamId, Mining<'static>, Option<Vec<Tlv>>)>,
@@ -49,37 +49,60 @@ pub struct Io {
     tp_to_channel_manager_receiver: Receiver<TemplateDistribution<'static>>,
 }
 
-pub struct BitcoinCoreSv2Handle {
+struct BitcoinCoreSv2Handle {
     join_handle: JoinHandle<()>,
     cancellation_token: CancellationToken,
 }
 
-pub struct Init;
+pub(super) struct Init;
 
-pub struct IoReady {
+struct IoReady {
     io: Io,
 }
 
-pub struct JdsReady {
+struct JdsReady {
     io: Io,
 }
 
-pub struct TemplateProviderReady {
+struct TemplateProviderReady {
     io: Io,
 }
 
-pub struct ChannelManagerReady {
+struct ChannelManagerReady {
     io: Io,
     channel_manager: ChannelManager,
 }
 
-pub struct Running;
+pub(super) struct Running;
+
+pub(super) struct Failed;
+
+#[must_use = "bootstrap errors include a partially initialized runtime that must be shut down"]
+pub(super) struct BootstrapError {
+    kind: PoolErrorKind,
+    runtime: PoolRuntime<Failed>,
+}
+
+impl BootstrapError {
+    pub(super) fn into_parts(self) -> (PoolErrorKind, PoolRuntime<Failed>) {
+        (self.kind, self.runtime)
+    }
+}
+
+impl<State> From<(PoolErrorKind, PoolRuntime<State>)> for BootstrapError {
+    fn from((kind, runtime): (PoolErrorKind, PoolRuntime<State>)) -> Self {
+        Self {
+            kind,
+            runtime: runtime.into_failed(),
+        }
+    }
+}
 
 /// The core coordinator of the Pool runtime, parameterized by its current bootstrap `State`.
 ///
 /// It manages the lifecycle of essential sub-services and channels, ensuring resources
 /// are correctly initialized, passed to background executors, and cleanly torn down.
-pub struct PoolRuntime<State> {
+pub(super) struct PoolRuntime<State> {
     pool: PoolSv2,
     task_manager: Arc<TaskManager>,
     state: State,
@@ -92,11 +115,25 @@ pub struct PoolRuntime<State> {
 }
 
 impl<State> PoolRuntime<State> {
+    fn into_failed(self) -> PoolRuntime<Failed> {
+        PoolRuntime {
+            pool: self.pool,
+            task_manager: self.task_manager,
+            state: Failed,
+            jd: self.jd,
+            bitcoin_core_sv2: self.bitcoin_core_sv2,
+            encoded_outputs: self.encoded_outputs,
+            coinbase_outputs: self.coinbase_outputs,
+            #[cfg(feature = "monitoring")]
+            monitoring_server: self.monitoring_server,
+        }
+    }
+
     /// Performs a coordinated, graceful shutdown of the runtime.
     ///
     /// Signals cancellation to all active sub-services and background tasks, awaiting
     /// their clean termination up to a configured graceful timeout.
-    pub async fn shutdown(mut self) {
+    pub(super) async fn shutdown(mut self) {
         self.pool.cancellation_token.cancel();
 
         if let Some(jd) = self.jd.take() {
@@ -147,7 +184,7 @@ impl<State> PoolRuntime<State> {
 
 #[allow(clippy::result_large_err)]
 impl PoolRuntime<Init> {
-    pub fn new(pool: PoolSv2) -> Result<Self, PoolErrorKind> {
+    pub(super) fn new(pool: PoolSv2) -> Result<Self, PoolErrorKind> {
         let coinbase_outputs = vec![pool.config.get_txout()];
         let mut encoded_outputs = vec![];
 
@@ -170,7 +207,7 @@ impl PoolRuntime<Init> {
 
     /// Allocates internal channels, transitioning the runtime from
     /// [`Init`] to [`IoReady`].
-    pub fn bootstrap_io(self) -> PoolRuntime<IoReady> {
+    fn bootstrap_io(self) -> PoolRuntime<IoReady> {
         let (downstream_to_channel_manager_sender, downstream_to_channel_manager_receiver) =
             unbounded();
         let (channel_manager_to_tp_sender, channel_manager_to_tp_receiver) = unbounded();
@@ -201,49 +238,24 @@ impl PoolRuntime<Init> {
     /// Drives the linear bootstrap sequence of the pool, transitioning the runtime
     /// from [`Init`] to the active [`Running`] state.
     ///
-    /// If any intermediate phase fails,
-    /// [`PoolRuntime::shutdown`] is automatically called to prevent resource leaks.
-    pub async fn bootstrap(self) -> Result<PoolRuntime<Running>, PoolErrorKind> {
+    /// If an intermediate phase fails, the caller receives the partially initialized
+    /// runtime and is responsible for shutting down any resources that were already started.
+    pub(super) async fn bootstrap(self) -> Result<PoolRuntime<Running>, BootstrapError> {
         let runtime = self.bootstrap_io();
 
-        let runtime: PoolRuntime<JdsReady> = match runtime.bootstrap_jds().await {
-            Ok(rt) => rt,
-            Err((e, rt)) => {
-                rt.shutdown().await;
-                return Err(e);
-            }
-        };
+        let runtime: PoolRuntime<JdsReady> = runtime.bootstrap_jds().await?;
 
         let runtime: PoolRuntime<TemplateProviderReady> =
-            match runtime.bootstrap_template_provider().await {
-                Ok(rt) => rt,
-                Err((e, rt)) => {
-                    rt.shutdown().await;
-                    return Err(e);
-                }
-            };
+            runtime.bootstrap_template_provider().await?;
 
-        let runtime: PoolRuntime<ChannelManagerReady> =
-            match runtime.bootstrap_channel_manager().await {
-                Ok(rt) => rt,
-                Err((e, rt)) => {
-                    rt.shutdown().await;
-                    return Err(e);
-                }
-            };
+        let runtime: PoolRuntime<ChannelManagerReady> = runtime.bootstrap_channel_manager().await?;
 
-        let _: PoolRuntime<Running> = match runtime.start_services().await {
-            Ok(rt) => return Ok(rt),
-            Err((e, rt)) => {
-                rt.shutdown().await;
-                return Err(e);
-            }
-        };
+        Ok(runtime.start_services().await?)
     }
 }
 
 impl PoolRuntime<IoReady> {
-    pub async fn bootstrap_jds(
+    async fn bootstrap_jds(
         self,
     ) -> Result<PoolRuntime<JdsReady>, (PoolErrorKind, PoolRuntime<IoReady>)> {
         let jds_config = match self.pool.config.build_jds_config() {
@@ -365,7 +377,7 @@ impl PoolRuntime<IoReady> {
 }
 
 impl PoolRuntime<JdsReady> {
-    pub async fn bootstrap_template_provider(
+    async fn bootstrap_template_provider(
         self,
     ) -> Result<PoolRuntime<TemplateProviderReady>, (PoolErrorKind, PoolRuntime<JdsReady>)> {
         let cancellation_token = self.pool.cancellation_token.clone();
@@ -477,7 +489,7 @@ impl PoolRuntime<JdsReady> {
 }
 
 impl PoolRuntime<TemplateProviderReady> {
-    pub async fn bootstrap_channel_manager(
+    async fn bootstrap_channel_manager(
         self,
     ) -> Result<PoolRuntime<ChannelManagerReady>, (PoolErrorKind, PoolRuntime<TemplateProviderReady>)>
     {
@@ -625,7 +637,7 @@ impl PoolRuntime<ChannelManagerReady> {
 }
 
 impl PoolRuntime<Running> {
-    pub async fn wait_for_shutdown(&self) {
+    pub(super) async fn wait_for_shutdown(&self) {
         let cancellation_token = self.pool.cancellation_token.clone();
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
