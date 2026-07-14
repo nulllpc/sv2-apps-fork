@@ -1,9 +1,9 @@
 use async_channel::{Receiver, Sender};
 use std::{path::PathBuf, sync::Arc, thread::JoinHandle};
 use stratum_apps::{
-    bitcoin_core_sv2::common::{
-        template_distribution_protocol::{self, CancellationToken},
-        BitcoinCoreVersion,
+    bitcoin_core_sv2::{
+        runtime_api::{template_distribution_protocol, BitcoinCoreVersion},
+        CancellationToken,
     },
     stratum_core::parsers_sv2::TemplateDistribution,
     task_manager::TaskManager,

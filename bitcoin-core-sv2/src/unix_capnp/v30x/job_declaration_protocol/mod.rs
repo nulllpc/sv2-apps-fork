@@ -2,9 +2,10 @@
 //! UNIX socket.
 
 use crate::{
-    common::job_declaration_protocol::io::JdRequest,
-    unix_capnp::v30x::job_declaration_protocol::{
-        error::BitcoinCoreSv2JDPError, mempool::MempoolMirror,
+    runtime_api::job_declaration_protocol::io::JdRequest,
+    unix_capnp::{
+        v30x::job_declaration_protocol::error::BitcoinCoreSv2JDPError,
+        v31x_v30x::job_declaration_protocol::mempool::MempoolMirror,
     },
 };
 use async_channel::Receiver;
@@ -27,7 +28,6 @@ use tracing::{debug, error, info, warn};
 
 pub mod error;
 mod handlers;
-mod mempool;
 mod monitors;
 
 /// The main abstraction for interacting with Bitcoin Core via Sv2 Job Declaration Protocol.
@@ -47,10 +47,14 @@ mod monitors;
 /// - Assembling a test block with the declared coinbase and transactions
 /// - Using Bitcoin Core's `checkBlock` to validate block structure
 ///
-/// If transactions are missing, a [`crate::common::job_declaration_protocol::io::JdResponse::MissingTransactions`] response is sent. If validation
-/// succeeds, a [`crate::common::job_declaration_protocol::io::JdResponse::Success`] response with current template parameters is sent.
+/// If transactions are missing, a
+/// [`crate::common::job_declaration_protocol::io::JdResponse::MissingTransactions`] response is
+/// sent. If validation succeeds, a
+/// [`crate::common::job_declaration_protocol::io::JdResponse::Success`] response with current
+/// template parameters is sent.
 ///
-/// Incoming [`JdRequest::PushSolution`] requests are used to submit mining solutions to Bitcoin Core.
+/// Incoming [`JdRequest::PushSolution`] requests are used to submit mining solutions to Bitcoin
+/// Core.
 #[derive(Clone)]
 pub struct BitcoinCoreSv2JDP {
     thread_ipc_client: ThreadIpcClient,

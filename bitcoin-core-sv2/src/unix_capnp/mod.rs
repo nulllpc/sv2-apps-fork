@@ -9,3 +9,6 @@
 
 pub mod v30x;
 pub mod v31x;
+
+// Shared cross-version implementation modules are internal plumbing, not stable public API.
+pub(crate) mod v31x_v30x;

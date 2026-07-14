@@ -11,7 +11,7 @@ use std::net::IpAddr;
 
 use async_channel::{unbounded, Receiver, Sender};
 use stratum_apps::{
-    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
+    bitcoin_core_sv2::CancellationToken,
     channel_utils::ReceiverCleanup,
     fallback_coordinator::FallbackCoordinator,
     network_helpers::noise_stream::NoiseTcpStream,

@@ -17,9 +17,9 @@ use integration_tests_sv2::{
 };
 use std::time::{Duration, Instant};
 use stratum_apps::{
-    bitcoin_core_sv2::common::{
-        template_distribution_protocol::{self, CancellationToken as TdpCancellationToken},
-        BitcoinCoreVersion,
+    bitcoin_core_sv2::{
+        runtime_api::{template_distribution_protocol, BitcoinCoreVersion},
+        CancellationToken,
     },
     stratum_core::{
         parsers_sv2::TemplateDistribution,
@@ -52,7 +52,7 @@ async fn assert_tdp_io_integration(version: BitcoinCoreVersion) {
     let (incoming_sender, incoming_receiver) = async_channel::unbounded();
     let (outgoing_sender, outgoing_receiver) = async_channel::unbounded();
 
-    let cancellation_token = TdpCancellationToken::new();
+    let cancellation_token = CancellationToken::new();
     let cancellation_token_clone = cancellation_token.clone();
     let socket_path_clone = socket_path.clone();
 

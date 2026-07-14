@@ -3,7 +3,8 @@
 //! This module provides connection management, encrypted streams, and protocol handling
 //! for Stratum V2 applications. It includes support for:
 //!
-//! - Noise-encrypted connections ([`crate::network_helpers::noise_connection`], [`crate::network_helpers::noise_stream`])
+//! - Noise-encrypted connections ([`crate::network_helpers::noise_connection`],
+//!   [`crate::network_helpers::noise_stream`])
 //! - SV1 protocol connections (`sv1_connection`) - when `sv1` feature is enabled
 //! - Hostname resolution ([`crate::network_helpers::resolve_hostname`])
 //!

@@ -11,7 +11,7 @@ use std::{
 
 use async_channel::{unbounded, Receiver, Sender};
 use stratum_apps::{
-    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
+    bitcoin_core_sv2::CancellationToken,
     fallback_coordinator::FallbackCoordinator,
     stratum_core::{bitcoin::consensus::Encodable, parsers_sv2::JobDeclaration},
     task_manager::TaskManager,

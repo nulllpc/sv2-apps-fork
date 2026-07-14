@@ -24,7 +24,7 @@ use std::{
     },
 };
 use stratum_apps::{
-    bitcoin_core_sv2::common::job_declaration_protocol::CancellationToken,
+    bitcoin_core_sv2::CancellationToken,
     config_helpers::CoinbaseRewardScript,
     key_utils::{Secp256k1PublicKey, Secp256k1SecretKey},
     network_helpers::accept_noise_connection,

@@ -20,7 +20,7 @@ use std::{
     time::{Duration, Instant},
 };
 use stratum_apps::{
-    bitcoin_core_sv2::common::job_declaration_protocol::CancellationToken,
+    bitcoin_core_sv2::CancellationToken,
     custom_mutex::Mutex,
     network_helpers::noise_stream::NoiseTcpStream,
     stratum_core::{

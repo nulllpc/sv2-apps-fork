@@ -6,7 +6,7 @@ use std::{
     process::{Child, Command, Stdio},
 };
 use stratum_apps::{
-    bitcoin_core_sv2::common::BitcoinCoreVersion,
+    bitcoin_core_sv2::runtime_api::BitcoinCoreVersion,
     stratum_core::bitcoin::{Address, Amount, Txid},
 };
 use tracing::warn;

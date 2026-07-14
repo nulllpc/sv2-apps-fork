@@ -42,6 +42,8 @@ use tracing::{debug, error, info, warn};
 
 pub mod error;
 mod handlers;
+#[allow(clippy::duplicate_mod)]
+#[path = "../../v31x_v30x/template_distribution_protocol/monitors.rs"]
 mod monitors;
 mod template_data;
 
@@ -55,7 +57,9 @@ const MIN_BLOCK_RESERVED_WEIGHT: u64 = 2000;
 /// - A `u64` for the fee delta threshold in satoshis
 /// - A `u8` for the minimum interval in seconds between template updates
 /// - A [`async_channel::Receiver`] for incoming [`TemplateDistribution`] messages (handles
-///   [`CoinbaseOutputConstraints`], [`stratum_core::template_distribution_sv2::RequestTransactionData`], and [`stratum_core::template_distribution_sv2::SubmitSolution`])
+///   [`CoinbaseOutputConstraints`],
+///   [`stratum_core::template_distribution_sv2::RequestTransactionData`], and
+///   [`stratum_core::template_distribution_sv2::SubmitSolution`])
 /// - A [`async_channel::Sender`] for outgoing [`TemplateDistribution`] messages
 /// - A [`tokio_util::sync::CancellationToken`] to stop the internally spawned tasks
 ///
@@ -71,11 +75,13 @@ const MIN_BLOCK_RESERVED_WEIGHT: u64 = 2000;
 /// When there's a new Chain Tip, the [`BitcoinCoreSv2TDP`] instance will send a `NewTemplate`
 /// followed by a corresponding `SetNewPrevHash` message over the outgoing channel.
 ///
-/// Incoming [`stratum_core::template_distribution_sv2::RequestTransactionData`] messages are used to request transactions relative to a
-/// specific template, for which a corresponding `RequestTransactionDataSuccess` or
-/// `RequestTransactionDataError` message is sent over the outgoing channel.
+/// Incoming [`stratum_core::template_distribution_sv2::RequestTransactionData`] messages are used
+/// to request transactions relative to a specific template, for which a corresponding
+/// `RequestTransactionDataSuccess` or `RequestTransactionDataError` message is sent over the
+/// outgoing channel.
 ///
-/// Incoming [`stratum_core::template_distribution_sv2::SubmitSolution`] messages are used to submit solutions to a specific template.
+/// Incoming [`stratum_core::template_distribution_sv2::SubmitSolution`] messages are used to submit
+/// solutions to a specific template.
 #[derive(Clone)]
 pub struct BitcoinCoreSv2TDP {
     fee_threshold: u64,
@@ -188,10 +194,11 @@ impl BitcoinCoreSv2TDP {
     /// Runs the [`BitcoinCoreSv2TDP`] instance, monitoring for:
     /// - Chain Tip changes, for which it will send a `NewTemplate` message, followed by a
     ///   `SetNewPrevHash` message
-    /// - incoming [`stratum_core::template_distribution_sv2::RequestTransactionData`] messages, for which it will send a
-    ///   `RequestTransactionDataSuccess` or `RequestTransactionDataError` message as a response
-    /// - incoming [`stratum_core::template_distribution_sv2::SubmitSolution`] messages, for which it will submit the solution to the Bitcoin
-    ///   Core IPC client
+    /// - incoming [`stratum_core::template_distribution_sv2::RequestTransactionData`] messages, for
+    ///   which it will send a `RequestTransactionDataSuccess` or `RequestTransactionDataError`
+    ///   message as a response
+    /// - incoming [`stratum_core::template_distribution_sv2::SubmitSolution`] messages, for which
+    ///   it will submit the solution to the Bitcoin Core IPC client
     /// - incoming [`CoinbaseOutputConstraints`] messages, for which it will update the coinbase
     ///   output constraints
     ///

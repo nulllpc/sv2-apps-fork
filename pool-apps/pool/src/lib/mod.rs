@@ -4,7 +4,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use stratum_apps::bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken;
+use stratum_apps::bitcoin_core_sv2::CancellationToken;
 use tokio::sync::Notify;
 use tracing::info;
 

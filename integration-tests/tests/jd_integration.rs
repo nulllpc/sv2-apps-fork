@@ -947,7 +947,7 @@ async fn jdc_group_standard_channels() {
     for i in 0..NUM_STANDARD_CHANNELS {
         let open_standard_mining_channel = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
             OpenStandardMiningChannel {
-                request_id: i.into(),
+                request_id: i,
                 user_identity: "user_identity".try_into().unwrap(),
                 nominal_hash_rate: 1000.0,
                 max_target: vec![0xff; 32].try_into().unwrap(),
@@ -1141,7 +1141,7 @@ async fn jdc_require_standard_jobs_set_does_not_group_standard_channels() {
     for i in 0..NUM_STANDARD_CHANNELS {
         let open_standard_mining_channel = AnyMessage::Mining(Mining::OpenStandardMiningChannel(
             OpenStandardMiningChannel {
-                request_id: i.into(),
+                request_id: i,
                 user_identity: "user_identity".try_into().unwrap(),
                 nominal_hash_rate: 1000.0,
                 max_target: vec![0xff; 32].try_into().unwrap(),
@@ -1310,7 +1310,7 @@ async fn jdc_require_standard_jobs_set_rejects_open_extended_mining_channel() {
 
     let open_extended_mining_channel = AnyMessage::Mining(Mining::OpenExtendedMiningChannel(
         OpenExtendedMiningChannel {
-            request_id: 100u32.into(),
+            request_id: 100u32,
             user_identity: "user_identity".try_into().unwrap(),
             nominal_hash_rate: 1000.0,
             max_target: vec![0xff; 32].try_into().unwrap(),

@@ -13,7 +13,7 @@ use async_channel::{unbounded, Receiver, Sender};
 #[cfg(feature = "monitoring")]
 use stratum_apps::monitoring::MonitoringServer;
 use stratum_apps::{
-    bitcoin_core_sv2::common::template_distribution_protocol::CancellationToken,
+    bitcoin_core_sv2::CancellationToken,
     stratum_core::{
         bitcoin::{consensus::Encodable, TxOut},
         parsers_sv2::{Mining, TemplateDistribution, Tlv},

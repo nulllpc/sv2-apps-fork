@@ -8,11 +8,11 @@ A Rust library that integrates [Bitcoin Core](https://bitcoin.org/en/bitcoin-cor
 - building Sv2 applications that act as a Client under the Template Distribution Protocol (e.g.: Pool or JDC) while connecting directly to the Bitcoin Core node.
 - building a Sv2 Template Provider application that acts as a Template Distribution Protocol Server while creating templates from a Bitcoin Core node.
 
-The crate exposes three module families:
+`bitcoin_core_sv2::runtime_api` is the main interface of the crate. Downstream implementations should use the factories:
+- `bitcoin_core_sv2::runtime_api::template_distribution_protocol::new(version: BitcoinCoreVersion, ...) -> Result<BitcoinCoreSv2TDP, BitcoinCoreSv2TDPError>`
+- `bitcoin_core_sv2::runtime_api::job_declaration_protocol::new(version: BitcoinCoreVersion, ...) -> Result<BitcoinCoreSv2JDP, BitcoinCoreSv2JDPError>`
 
-- `bitcoin_core_sv2::common` - version-agnostic enum-dispatch runtime handles and protocol-specific `new(version, ...)` factories.
-- `bitcoin_core_sv2::unix_capnp::v30x` - Bitcoin Core v30.x IPC implementation.
-- `bitcoin_core_sv2::unix_capnp::v31x` - Bitcoin Core v31.x IPC implementation.
+while selecting the desired version.
 
 ### Flavor naming rationale
 
@@ -25,7 +25,7 @@ example:
 - `bitcoin_core_sv2::tcp_capnp` (theoretical/future)
 - `bitcoin_core_sv2::http_json_rpc` (theoretical/future)
 
-Downstream applications should integrate through `bitcoin_core_sv2::common`, choose the Bitcoin Core major version at runtime, and build runtimes via `template_distribution_protocol::new` / `job_declaration_protocol::new`.
+Downstream applications should integrate through `bitcoin_core_sv2::runtime_api`, choose the Bitcoin Core major version at runtime, and build runtimes via `template_distribution_protocol::new` / `job_declaration_protocol::new`.
 
 ## Requirements
 
@@ -57,8 +57,7 @@ The `min_interval` parameter (in seconds) determines the minimum amount of time 
 
 ## Examples
 
-- `tdp_logger_v30x` - Template Distribution Protocol logger wired to `bitcoin_core_sv2::unix_capnp::v30x`.
-- `tdp_logger_v31x` - Template Distribution Protocol logger wired to `bitcoin_core_sv2::unix_capnp::v31x`.
+- `tdp_logger` - Template Distribution Protocol logger built through `bitcoin_core_sv2::runtime_api`, pinned to Bitcoin Core v31.x (change one line to target another supported version).
 
 ## License
 

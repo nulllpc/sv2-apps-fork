@@ -15,8 +15,10 @@
 //!
 //! ## Module layout
 //!
-//! - [`common`] exposes version-agnostic runtime handles and protocol-specific `new(version, ...)`
-//!   factories with enum dispatch across backend versions.
+//! - [`runtime_api`] exposes version-agnostic runtime handles and protocol-specific `new(version,
+//!   ...)` factories with enum dispatch across backend versions.
+//! - [`CancellationToken`] is re-exported at the crate root for runtime shutdown signaling across
+//!   protocols.
 //! - [`unix_capnp::v30x`] contains the Bitcoin Core v30.x IPC implementation.
 //! - [`unix_capnp::v31x`] contains the Bitcoin Core v31.x IPC implementation.
 //!
@@ -26,13 +28,16 @@
 //! explicit to leave room for additional backend families in the future (for example, a
 //! `tcp_capnp` flavor or an `http_json_rpc` flavor).
 //!
-//! Downstream applications should integrate through [`common`] and choose a
-//! [`common::BitcoinCoreVersion`] at runtime.
+//! Downstream applications should integrate through [`runtime_api`] and choose a
+//! [`runtime_api::BitcoinCoreVersion`] at runtime.
 //!
 //! Backend-specific IPC/runtime constraints are documented under [`unix_capnp`].
 
-pub mod common;
+pub mod runtime_api;
 pub mod unix_capnp;
+
+/// Shared runtime cancellation primitive used by both TDP and JDP APIs.
+pub use tokio_util::sync::CancellationToken;
 
 /// The minimum block reserved weight established by Bitcoin Core.
 pub const MIN_BLOCK_RESERVED_WEIGHT: u64 = 2000;
