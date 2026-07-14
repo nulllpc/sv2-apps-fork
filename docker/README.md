@@ -109,6 +109,29 @@ docker compose --profile miner_apps --env-file docker_env up --build
 docker compose --profile tproxy --env-file docker_env up --build
 ```
 
+### Miner telemetry
+
+Miner telemetry lets the monitoring API/UI show data read from the ASIC's web/API endpoint,
+such as its management IP, firmware, hashrate, power, temperature, and uptime.
+
+Set the subnet variable for the app that your miners connect to:
+
+* Use `JDC_MINER_TELEMETRY_CIDR` when SV2 ASIC miners connect directly to JDC.
+* Use `TPROXY_MINER_TELEMETRY_CIDR` when SV1 ASIC miners connect to Translator Proxy.
+
+Use the LAN subnet that contains the miners' web/API addresses. For example, if your Bitaxe web
+UI is at `192.168.1.63`, use `192.168.1.0/24`. If SV1 miners connect through Translator Proxy and
+Translator Proxy connects to JDC, configure telemetry on Translator Proxy; JDC only fetches
+per-miner telemetry for SV2 miners connected directly to it.
+
+Each connected miner should use a unique pool username/worker name. If two connected miners use
+the same name, telemetry is left unassigned for those miners and the API reports
+`duplicate_worker_name`.
+
+Telemetry is only assigned when the miner's web/API data reports both the expected username and the
+stratum port of the app being monitored. This prevents Translator Proxy from showing telemetry for
+an ASIC that has moved to JDC while another miner still uses the same username.
+
 ---
 
 ## Services Overview
@@ -128,11 +151,13 @@ If something behaves weirdly, 99% of the time your `docker_env` is the culprit.
 
 * Port **34265**
 * Also mounts the same `node.sock` path from `docker_env`
+* `JDC_MINER_TELEMETRY_CIDR` is the LAN subnet containing directly connected SV2 miners' web/API addresses
 
 ### **tproxy_sv2**
 
 * Port **34255**
 * Upstream target (JDC or pool) is fully controlled via `docker_env` variables
+* `TPROXY_MINER_TELEMETRY_CIDR` is the LAN subnet containing connected SV1 miners' web/API addresses
 * `TPROXY_VERIFY_PAYOUT=false` is the standard pool-mining default; set it to `true` only for
   solo/donation identities where `TPROXY_USER_IDENTITY` encodes the expected on-chain payout
 

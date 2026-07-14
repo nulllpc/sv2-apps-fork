@@ -23,6 +23,8 @@ JDC_POOL_ADDRESS=pool_sv2
 JDC_POOL_PORT=3333
 JDC_UPSTREAM_JDS_ADDRESS=pool_sv2 # JDS is now embbeded in the pool
 JDC_UPSTREAM_JDS_PORT=3334
+# LAN subnet containing ASIC miner web/API addresses (for example, 192.168.1.0/24).
+JDC_MINER_TELEMETRY_CIDR=192.168.1.0/24
 
 #Tproxy Settings
 TPROXY_USER_IDENTITY=your_username_here
@@ -34,3 +36,5 @@ TPROXY_ENABLE_VARDIFF=true
 TPROXY_UPSTREAM_ADDRESS=jd_client_sv2 # Use jd_client_sv2 for pool_and_miner_apps, pool_sv2 for pool_and_miner_apps_no_jd
 TPROXY_UPSTREAM_PORT=34265 # Use 34265 for pool_and_miner_apps, 3333 for pool_and_miner_apps_no_jd
 TPROXY_UPSTREAM_AUTHORITY_PUBKEY=9auqWEzQDVyd2oe1JVGFLMLHZtCo2FFqZwtKA5gd9xbuEu7PH72
+# LAN subnet containing ASIC miner web/API addresses (for example, 192.168.1.0/24).
+TPROXY_MINER_TELEMETRY_CIDR=192.168.1.0/24

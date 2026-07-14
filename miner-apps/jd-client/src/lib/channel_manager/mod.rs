@@ -1,3 +1,5 @@
+#[cfg(feature = "monitoring")]
+use std::net::IpAddr;
 use std::{
     collections::{BinaryHeap, VecDeque},
     net::SocketAddr,
@@ -62,7 +64,7 @@ use crate::{
     },
 };
 #[cfg(feature = "monitoring")]
-use stratum_apps::monitoring::MinerTelemetry;
+use stratum_apps::monitoring::{MinerTelemetry, MinerTelemetryStatus};
 pub mod downstream_message_handler;
 mod extensions_message_handler;
 mod jd_message_handler;
@@ -182,6 +184,58 @@ impl ChannelManagerIo {
     }
 }
 
+#[cfg(feature = "monitoring")]
+#[derive(Clone)]
+pub(crate) struct MinerTelemetryState {
+    /// Latest telemetry fetched for each matched downstream connection.
+    pub(crate) telemetry: SharedMap<DownstreamId, MinerTelemetry>,
+    /// Miner management IP selected for each matched downstream connection.
+    pub(crate) management_ips: SharedMap<DownstreamId, IpAddr>,
+    /// Latest telemetry matching status for each active downstream connection.
+    pub(crate) statuses: SharedMap<DownstreamId, MinerTelemetryStatus>,
+    /// LAN CIDR ranges scanned for miner management interfaces.
+    pub(crate) cidrs: Vec<String>,
+    /// JDC listening port used to match discovered pool entries to this instance.
+    pub(crate) pool_port: u16,
+}
+
+#[cfg(feature = "monitoring")]
+impl MinerTelemetryState {
+    fn new(cidrs: Vec<String>, pool_port: u16) -> Self {
+        Self {
+            telemetry: SharedMap::new(),
+            management_ips: SharedMap::new(),
+            statuses: SharedMap::new(),
+            cidrs,
+            pool_port,
+        }
+    }
+
+    fn clear(&self) {
+        self.telemetry.clear();
+        self.management_ips.clear();
+        self.statuses.clear();
+    }
+
+    fn remove_downstream(&self, downstream_id: DownstreamId) {
+        self.telemetry.remove(&downstream_id);
+        self.management_ips.remove(&downstream_id);
+        self.statuses.remove(&downstream_id);
+    }
+
+    pub(crate) fn telemetry_for(&self, downstream_id: DownstreamId) -> Option<MinerTelemetry> {
+        self.telemetry.get_cloned(&downstream_id)
+    }
+
+    pub(crate) fn management_ip_for(&self, downstream_id: DownstreamId) -> Option<IpAddr> {
+        self.management_ips.get_cloned(&downstream_id)
+    }
+
+    pub(crate) fn status_for(&self, downstream_id: DownstreamId) -> Option<MinerTelemetryStatus> {
+        self.statuses.get_cloned(&downstream_id)
+    }
+}
+
 /// Contains all the state of mutable and immutable data required
 /// by channel manager to process its task along with channels
 /// to perform message traversal.
@@ -258,7 +312,7 @@ pub struct ChannelManager {
     pub upstream_state: AtomicUpstreamState,
     pub mode: JDMode,
     #[cfg(feature = "monitoring")]
-    pub(crate) miner_telemetry: SharedMap<DownstreamId, MinerTelemetry>,
+    pub(crate) miner_telemetry: MinerTelemetryState,
 }
 
 #[cfg_attr(not(test), hotpath::measure_all)]
@@ -269,6 +323,8 @@ impl ChannelManager {
         coinbase_outputs: Vec<u8>,
     ) -> JDCResult<(), error::ChannelManager> {
         self.downstream.clear();
+        #[cfg(feature = "monitoring")]
+        self.miner_telemetry.clear();
         self.template_store.clear();
         self.last_declare_job_store.clear();
         self.template_id_to_upstream_job_id.clear();
@@ -441,7 +497,10 @@ impl ChannelManager {
             upstream_state: AtomicUpstreamState::new(UpstreamState::SoloMining),
             mode,
             #[cfg(feature = "monitoring")]
-            miner_telemetry: SharedMap::new(),
+            miner_telemetry: MinerTelemetryState::new(
+                config.miner_telemetry_cidrs().to_vec(),
+                config.listening_address().port(),
+            ),
         };
 
         Ok(channel_manager)
@@ -674,8 +733,6 @@ impl ChannelManager {
                                         task_manager_inner.clone(),
                                         supported_extensions_inner,
                                         required_extensions_inner,
-                                        #[cfg(feature = "monitoring")]
-                                        socket_address.ip(),
                                     );
 
                                     this.channel_manager_io
@@ -853,6 +910,8 @@ impl ChannelManager {
             .retain(|key, _| key.downstream_id != downstream_id);
         self.vardiff
             .retain(|key, _| key.downstream_id != downstream_id);
+        #[cfg(feature = "monitoring")]
+        self.miner_telemetry.remove_downstream(downstream_id);
         self.channel_manager_io
             .downstream_sender
             .remove(&downstream_id);
