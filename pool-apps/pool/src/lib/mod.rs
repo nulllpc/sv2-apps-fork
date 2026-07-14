@@ -51,14 +51,16 @@ impl PoolSv2 {
     /// 4. **Teardown:** Performs a coordinated graceful cleanup of all services and tasks,
     ///    remaining blocked until all sub-services have exited.
     ///
-    /// If any error occurs during bootstrapping, the runtime automatically initiates a
-    /// graceful shutdown of any partially initialized components before returning the error.
+    /// If any error occurs during bootstrapping, `start` receives the partially initialized
+    /// runtime, gracefully shuts it down, and then returns the error.
     pub async fn start(&self) -> Result<(), PoolErrorKind> {
         let runtime = PoolRuntime::<Init>::new(self.clone())?;
 
         let runtime = match runtime.bootstrap().await {
             Ok(runtime) => runtime,
             Err(err) => {
+                let (err, runtime) = err.into_parts();
+                runtime.shutdown().await;
                 return Err(err);
             }
         };
