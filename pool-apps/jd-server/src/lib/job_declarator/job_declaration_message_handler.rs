@@ -168,22 +168,38 @@ impl HandleJobDeclarationMessagesFromClientAsync for JobDeclarator {
         // validate job
         let response = match self
             .job_validator
-            .handle_declare_mining_job(msg.clone(), None)
+            .handle_declare_mining_job(client_id, msg.clone(), None)
             .await
         {
             // if job is valid, activate token and return DeclareMiningJobSuccess
             DeclareMiningJobResult::Success => {
-                let activated_token = self.token_manager.activate(token, client_id);
-
-                let declare_mining_job_success = DeclareMiningJobSuccess {
-                    request_id: msg.request_id,
-                    new_mining_job_token: activated_token
-                        .to_le_bytes()
-                        .to_vec()
-                        .try_into()
-                        .expect("must always be valid B0_255"),
-                };
-                JobDeclaration::DeclareMiningJobSuccess(declare_mining_job_success)
+                match self.token_manager.activate(token, client_id) {
+                    Some(activated_token) => {
+                        let declare_mining_job_success = DeclareMiningJobSuccess {
+                            request_id: msg.request_id,
+                            new_mining_job_token: activated_token
+                                .to_le_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("must always be valid B0_255"),
+                        };
+                        JobDeclaration::DeclareMiningJobSuccess(declare_mining_job_success)
+                    }
+                    None => {
+                        let declare_mining_job_error = DeclareMiningJobError {
+                            request_id: msg.request_id,
+                            error_code: ERROR_CODE_DECLARE_MINING_JOB_INVALID_MINING_JOB_TOKEN
+                                .as_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("error code string must be valid B0_255"),
+                            error_details: Vec::new()
+                                .try_into()
+                                .expect("empty array must be valid B0_64K"),
+                        };
+                        JobDeclaration::DeclareMiningJobError(declare_mining_job_error)
+                    }
+                }
             }
             // if job is invalid, return DeclareMiningJobError
             DeclareMiningJobResult::Error(error) => {
@@ -299,24 +315,45 @@ impl HandleJobDeclarationMessagesFromClientAsync for JobDeclarator {
 
         let response = match self
             .job_validator
-            .handle_declare_mining_job(pending_declare_mining_job.clone(), Some(msg.clone()))
+            .handle_declare_mining_job(
+                client_id,
+                pending_declare_mining_job.clone(),
+                Some(msg.clone()),
+            )
             .await
         {
             // if job is valid, activate token and return DeclareMiningJobSuccess
             DeclareMiningJobResult::Success => {
-                let activated_token = self
+                match self
                     .token_manager
-                    .activate(pending_declare_mining_job_token, client_id);
-
-                let declare_mining_job_success = DeclareMiningJobSuccess {
-                    request_id: msg.request_id,
-                    new_mining_job_token: activated_token
-                        .to_le_bytes()
-                        .to_vec()
-                        .try_into()
-                        .expect("must always be valid B0_255"),
-                };
-                JobDeclaration::DeclareMiningJobSuccess(declare_mining_job_success)
+                    .activate(pending_declare_mining_job_token, client_id)
+                {
+                    Some(activated_token) => {
+                        let declare_mining_job_success = DeclareMiningJobSuccess {
+                            request_id: msg.request_id,
+                            new_mining_job_token: activated_token
+                                .to_le_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("must always be valid B0_255"),
+                        };
+                        JobDeclaration::DeclareMiningJobSuccess(declare_mining_job_success)
+                    }
+                    None => {
+                        let declare_mining_job_error = DeclareMiningJobError {
+                            request_id: msg.request_id,
+                            error_code: ERROR_CODE_DECLARE_MINING_JOB_INVALID_MINING_JOB_TOKEN
+                                .as_bytes()
+                                .to_vec()
+                                .try_into()
+                                .expect("error code string must be valid B0_255"),
+                            error_details: Vec::new()
+                                .try_into()
+                                .expect("empty array must be valid B0_64K"),
+                        };
+                        JobDeclaration::DeclareMiningJobError(declare_mining_job_error)
+                    }
+                }
             }
             // if job is invalid, return DeclareMiningJobError
             DeclareMiningJobResult::Error(error_code) => {
@@ -368,13 +405,19 @@ impl HandleJobDeclarationMessagesFromClientAsync for JobDeclarator {
 
     async fn handle_push_solution(
         &mut self,
-        _client_id: Option<usize>,
+        client_id: Option<usize>,
         msg: PushSolution<'_>,
         _tlv_fields: Option<&[Tlv]>,
     ) -> Result<(), Self::Error> {
         info!("Received: {}", msg);
 
-        self.job_validator.handle_push_solution(msg).await;
+        // Shutdown: client_id is always Some; None indicates a bug.
+        let client_id =
+            client_id.ok_or_else(|| JDSError::shutdown(error::JDSErrorKind::ClientNotFound(0)))?;
+
+        self.job_validator
+            .handle_push_solution(client_id, msg)
+            .await;
 
         Ok(())
     }
