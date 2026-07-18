@@ -1039,16 +1039,16 @@ impl ChannelManager {
                             .map_err(JDCError::shutdown)?;
                     }
                     UpstreamState::Connected => {
-                        self.send_open_channel_request_to_mining_handler(
-                            downstream_id,
+                        self.handle_mining_message_from_client(
+                            Some(downstream_id),
                             Mining::OpenExtendedMiningChannel(downstream_msg),
                             tlvs.as_deref(),
                         )
                         .await?;
                     }
                     UpstreamState::SoloMining => {
-                        self.send_open_channel_request_to_mining_handler(
-                            downstream_id,
+                        self.handle_mining_message_from_client(
+                            Some(downstream_id),
                             Mining::OpenExtendedMiningChannel(downstream_msg),
                             tlvs.as_deref(),
                         )
@@ -1107,16 +1107,16 @@ impl ChannelManager {
                             .map_err(JDCError::shutdown)?;
                     }
                     UpstreamState::Connected => {
-                        self.send_open_channel_request_to_mining_handler(
-                            downstream_id,
+                        self.handle_mining_message_from_client(
+                            Some(downstream_id),
                             Mining::OpenStandardMiningChannel(downstream_msg),
                             tlvs.as_deref(),
                         )
                         .await?;
                     }
                     UpstreamState::SoloMining => {
-                        self.send_open_channel_request_to_mining_handler(
-                            downstream_id,
+                        self.handle_mining_message_from_client(
+                            Some(downstream_id),
                             Mining::OpenStandardMiningChannel(downstream_msg),
                             tlvs.as_deref(),
                         )
@@ -1134,19 +1134,6 @@ impl ChannelManager {
             }
         }
 
-        Ok(())
-    }
-
-    // Utility method to send open channel request from downstream to message handler.
-    #[inline]
-    async fn send_open_channel_request_to_mining_handler(
-        &mut self,
-        downstream_id: DownstreamId,
-        message: Mining<'_>,
-        tlvs: Option<&[Tlv]>,
-    ) -> JDCResult<(), error::ChannelManager> {
-        self.handle_mining_message_from_client(Some(downstream_id), message, tlvs)
-            .await?;
         Ok(())
     }
 

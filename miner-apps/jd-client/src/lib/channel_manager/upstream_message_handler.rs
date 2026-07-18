@@ -9,7 +9,10 @@ use stratum_apps::{
             outputs::deserialize_outputs,
             server::jobs::factory::JobFactory,
         },
-        handlers_sv2::{HandleMiningMessagesFromServerAsync, SupportedChannelTypes},
+        handlers_sv2::{
+            HandleMiningMessagesFromClientAsync, HandleMiningMessagesFromServerAsync,
+            SupportedChannelTypes,
+        },
         mining_sv2::*,
         parsers_sv2::{AnyMessage, Mining, TemplateDistribution, Tlv},
         template_distribution_sv2::RequestTransactionData,
@@ -305,12 +308,10 @@ impl HandleMiningMessagesFromServerAsync for ChannelManager {
                 .map_err(JDCError::shutdown)?;
 
             for pending_downstream_message in pending_downstreams {
-                self.send_open_channel_request_to_mining_handler(
-                    pending_downstream_message.downstream_id(),
-                    pending_downstream_message.message(),
-                    None,
-                )
-                .await?;
+                let downstream_id = pending_downstream_message.downstream_id();
+                let message = pending_downstream_message.message();
+                self.handle_mining_message_from_client(Some(downstream_id), message, None)
+                    .await?;
             }
         }
 
