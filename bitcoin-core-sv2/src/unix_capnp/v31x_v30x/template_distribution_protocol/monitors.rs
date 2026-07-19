@@ -147,15 +147,12 @@ impl BitcoinCoreSv2TDP {
                                     info!("⛓️ Chain Tip changed! New prev_hash: {}", new_prev_hash);
                                     debug!("CHAIN TIP CHANGE DETECTED - old: {}, new: {}", current_prev_hash, new_prev_hash);
 
-                                    let stale_template_ids = match self_clone.current_template_ids() {
-                                        Ok(stale_template_ids) => stale_template_ids,
-                                        Err(e) => {
-                                            error!("Failed to collect stale template ids: {:?}", e);
-                                            warn!("Terminating Sv2 Bitcoin Core IPC Connection");
-                                            self_clone.global_cancellation_token.cancel();
-                                            break;
-                                        }
-                                    };
+                                    if let Err(e) = self_clone.process_stale_template_data().await {
+                                        error!("Failed to collect stale template ids: {:?}", e);
+                                        warn!("Terminating Sv2 Bitcoin Core IPC Connection");
+                                        self_clone.global_cancellation_token.cancel();
+                                        break;
+                                    }
 
                                     match self_clone.publish_template(new_template_data, true, true, false).await {
                                         Ok(()) => {
@@ -169,9 +166,6 @@ impl BitcoinCoreSv2TDP {
                                             break;
                                         }
                                     }
-
-                                    // process the stale template data after 10s
-                                    self_clone.process_stale_template_data(stale_template_ids).await;
                                 } else {
                                     // check if the minimum interval has been reached
                                     if let Some(last_sent_template_instant) = self_clone.last_sent_template_instant {

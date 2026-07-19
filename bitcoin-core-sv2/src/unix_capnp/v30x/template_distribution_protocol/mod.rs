@@ -622,6 +622,10 @@ impl BitcoinCoreSv2TDP {
 
     // Spawns a task that processes stale template data after a 10-second grace period.
     //
+    // Takes a snapshot of [`current_template_ids`] at call time, then schedules their
+    // retirement. This ensures the snapshot is always taken at the epoch boundary rather
+    // than relying on the caller to pre-compute the stale set.
+    //
     // The grace period allows in-flight RequestTransactionData and SubmitSolution requests
     // to complete before the template data is retired. After the 10-second window:
     // - Stale template IDs are written to stale_template_ids, causing
@@ -629,7 +633,11 @@ impl BitcoinCoreSv2TDP {
     // - Stale entries are removed from template_data, causing both handle_request_transaction_data
     //   and handle_submit_solution to return errors.
     // - The underlying IPC client capabilities are released via destroy_ipc_client.
-    async fn process_stale_template_data(&self, stale_template_ids: HashSet<u64>) {
+    async fn process_stale_template_data(&self) -> Result<(), BitcoinCoreSv2TDPError> {
+        let stale_template_ids = self.current_template_ids()?;
+        if stale_template_ids.is_empty() {
+            return Ok(());
+        }
         let self_clone = self.clone();
         tokio::task::spawn_local(async move {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
@@ -706,5 +714,7 @@ impl BitcoinCoreSv2TDP {
                 }
             }
         });
+
+        Ok(())
     }
 }
