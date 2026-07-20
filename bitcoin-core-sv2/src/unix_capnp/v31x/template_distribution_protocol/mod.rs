@@ -62,7 +62,8 @@ const MIN_BLOCK_RESERVED_WEIGHT: u64 = 2000;
 /// It is instantiated with:
 /// - A `&`[`std::path::Path`] to the Bitcoin Core UNIX socket
 /// - A `u64` for the fee delta threshold in satoshis
-/// - A `u8` for the minimum interval in seconds between template updates
+/// - A `u8` for the minimum interval in seconds between mempool-driven template updates
+///   (chain tip updates are never throttled)
 /// - A [`async_channel::Receiver`] for incoming [`TemplateDistribution`] messages (handles
 ///   [`CoinbaseOutputConstraints`],
 ///   [`stratum_core::template_distribution_sv2::RequestTransactionData`], and
