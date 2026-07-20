@@ -42,6 +42,8 @@ impl BitcoinCoreSv2TDP {
             }
         }
 
+        self.process_stale_template_data().await?;
+
         self.template_ipc_client_cancellation_token = CancellationToken::new();
         debug!("Created new template_ipc_client_cancellation_token");
 
