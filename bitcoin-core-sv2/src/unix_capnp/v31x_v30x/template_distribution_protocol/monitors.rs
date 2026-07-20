@@ -1,6 +1,7 @@
 // Shared monitor implementation included by v30.x and v31.x TDP modules.
 
 use super::{BitcoinCoreSv2TDP, bitcoin_capnp_types::capnp};
+use crate::WAIT_NEXT_TIMEOUT_MS;
 use stratum_core::parsers_sv2::TemplateDistribution;
 use tracing::{debug, error, info, warn};
 
@@ -51,7 +52,12 @@ impl BitcoinCoreSv2TDP {
 
                 // Create a new request for each iteration
                 let wait_next_request = match self_clone
-                    .new_wait_next_request(&template_ipc_client, blocking_thread_ipc_client.clone())
+                    .new_wait_next_request(
+                        &template_ipc_client,
+                        blocking_thread_ipc_client.clone(),
+                        self_clone.fee_threshold as i64,
+                        WAIT_NEXT_TIMEOUT_MS,
+                    )
                     .await
                 {
                     Ok(wait_next_request) => wait_next_request,
