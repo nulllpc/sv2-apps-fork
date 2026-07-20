@@ -23,8 +23,8 @@ use crate::{
     error::{self, Action, LoopControl, TproxyError, TproxyErrorKind, TproxyResult},
     sv1::downstream::Downstream,
     utils::{
-        is_mining_authorize, SubmitShareWithChannelId, TproxyMode, AGGREGATED_CHANNEL_ID,
-        KEEPALIVE_JOB_ID_DELIMITER,
+        advertised_target_from_upstream, is_mining_authorize, SubmitShareWithChannelId,
+        TproxyMode, AGGREGATED_CHANNEL_ID, KEEPALIVE_JOB_ID_DELIMITER,
     },
 };
 use async_channel::{unbounded, Receiver, Sender};
@@ -1205,7 +1205,16 @@ impl Sv1Server {
                 let has_channel = entry.value().downstream_data.super_safe_lock(|d| {
                     let channel_id = d.channel_id?;
                     d.set_upstream_target(target, downstream_id);
-                    d.set_pending_target(target, downstream_id);
+                    // Downstream validation must use the advertised (pow2
+                    // rounded) difficulty; upstream_target keeps the exact
+                    // pool target for filtering forwarded shares.
+                    d.set_pending_target(
+                        advertised_target_from_upstream(
+                            target,
+                            SV1_MIN_DIFFICULTY_FOR_INTEGER_POWER_OF_TWO_ROUNDING,
+                        ),
+                        downstream_id,
+                    );
                     if let Some(hr) = derived_hashrate {
                         d.set_pending_hashrate(Some(hr as f32), downstream_id);
                     }
@@ -1297,7 +1306,15 @@ impl Sv1Server {
         };
         downstream.downstream_data.super_safe_lock(|d| {
             d.set_upstream_target(target, downstream_id);
-            d.set_pending_target(target, downstream_id);
+            // See send_set_difficulty_to_all_downstreams: validate downstream
+            // against the advertised pow2 difficulty, filter with the exact one.
+            d.set_pending_target(
+                advertised_target_from_upstream(
+                    target,
+                    SV1_MIN_DIFFICULTY_FOR_INTEGER_POWER_OF_TWO_ROUNDING,
+                ),
+                downstream_id,
+            );
             // Update pending hashrate derived from the upstream target
             if let Some(hr) = derived_hashrate {
                 d.set_pending_hashrate(Some(hr as f32), downstream_id);

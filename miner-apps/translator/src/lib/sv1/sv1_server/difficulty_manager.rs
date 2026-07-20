@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::sv1::sv1_server::{
     PendingTargetUpdate, SV1_MIN_DIFFICULTY_FOR_INTEGER_POWER_OF_TWO_ROUNDING,
 };
+use crate::utils::advertised_target_from_upstream;
 
 use stratum_apps::{
     stratum_core::{
@@ -102,7 +103,15 @@ impl Sv1Server {
                 // Always update the downstream's pending target and hashrate
                 if let Some(d) = self.downstreams.get(downstream_id) {
                     _ = d.downstream_data.safe_lock(|data| {
-                        data.set_pending_target(new_target, d.downstream_id);
+                        // Store the advertised (pow2 rounded) target so share
+                        // validation matches the difficulty the miner was sent.
+                        data.set_pending_target(
+                            advertised_target_from_upstream(
+                                new_target,
+                                SV1_MIN_DIFFICULTY_FOR_INTEGER_POWER_OF_TWO_ROUNDING,
+                            ),
+                            d.downstream_id,
+                        );
                         data.set_pending_hashrate(Some(new_hashrate), d.downstream_id);
                         data.stable_hashrate = false;
                     });

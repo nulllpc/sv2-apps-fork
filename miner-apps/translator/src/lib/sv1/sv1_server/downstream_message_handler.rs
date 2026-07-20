@@ -154,13 +154,38 @@ impl IsServer<'static> for Sv1Server {
                 data.target,
                 data.extranonce1.clone().into(),
                 data.version_rolling_mask.clone(),
-                job,
+                job.clone(),
             )
             .unwrap_or(false);
 
             if !is_valid {
                 error!("Invalid share for channel id: {}", channel_id);
                 return Ok(false);
+            }
+
+            // data.target is the advertised (pow2 rounded) difficulty. With
+            // rounding down, shares in the band between the advertised and the
+            // upstream target are expected: acknowledge them to the miner but
+            // do not queue them for upstream submission, as the upstream would
+            // reject them as below its target.
+            if let Some(upstream_target) = data.upstream_target {
+                let meets_upstream = validate_sv1_share(
+                    request,
+                    upstream_target,
+                    data.extranonce1.clone().into(),
+                    data.version_rolling_mask.clone(),
+                    job,
+                )
+                .unwrap_or(false);
+                if !meets_upstream {
+                    debug!(
+                        "Share from downstream {} channel {} meets advertised pow2 difficulty \
+                         but not upstream target; acknowledged downstream, filtered from \
+                         upstream submission",
+                        downstream_id, channel_id
+                    );
+                    return Ok(true);
+                }
             }
 
             data.pending_share = Some(SubmitShareWithChannelId {
