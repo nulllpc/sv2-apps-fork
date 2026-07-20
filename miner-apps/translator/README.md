@@ -47,6 +47,14 @@ verify_payout = false
 # Channel Configuration
 aggregate_channels = true  # true: shared channel, false: individual channels
 
+# Optional monitoring API and ASIC telemetry
+monitoring_address = "0.0.0.0:9092"
+monitoring_cache_refresh_secs = 15
+
+# LAN subnet containing ASIC miner web/API addresses (for example, 192.168.1.0/24).
+[miner_telemetry]
+cidrs = ["192.168.1.0/24"]
+
 # Downstream Difficulty Configuration
 [downstream_difficulty_config]
 min_individual_miner_hashrate = 10_000_000_000_000.0  # 10 TH/s
@@ -104,6 +112,29 @@ If verification fails, tProxy triggers upstream fallback instead of forwarding t
   - When `true`: Translator manages difficulty adjustments based on share submission rates
   - When `false`: Upstream manages difficulty, translator forwards SetTarget messages to miners
 
+#### **Miner Telemetry**
+Translator Proxy can enrich the monitoring API with telemetry from the ASICs connected to its SV1
+port. This is useful when you want the UI to show each miner's management IP, firmware, hashrate,
+power, temperature, uptime, and mining status.
+
+Set `[miner_telemetry].cidrs` to the LAN subnet that contains the miners' web/API addresses. For
+example, if a Bitaxe web UI is available at `192.168.1.63`, use:
+
+```toml
+# LAN subnet containing ASIC miner web/API addresses (for example, 192.168.1.0/24).
+[miner_telemetry]
+cidrs = ["192.168.1.0/24"]
+```
+
+Use the miner's LAN subnet, not the Docker subnet and not the Translator Proxy's own IP. Translator
+Proxy scans that subnet and assigns telemetry to an SV1 connection when the username configured in
+the miner's pool settings matches the worker name accepted by Translator Proxy and the miner's pool
+port matches `downstream_port`.
+
+Keep pool usernames/worker names unique for connected miners. If two connected miners use the same
+name, telemetry is not assigned to either of them and the monitoring API reports
+`duplicate_worker_name`.
+
 #### **Upstream Configuration**
 - `address`/`port`: SV2 upstream server connection details
 - `authority_pubkey`: Public key for SV2 connection authentication
@@ -125,20 +156,20 @@ cargo build --release -p translator_sv2
 
 #### **With Local Pool**
 ```bash
-cd roles/translator
-cargo run -- -c config-examples/tproxy-config-local-pool-example.toml
+cd miner-apps/translator
+cargo run -- -c config-examples/mainnet/tproxy-config-local-pool-example.toml
 ```
 
 #### **With Job Declaration Client**
 ```bash
-cd roles/translator
-cargo run -- -c config-examples/tproxy-config-local-jdc-example.toml
+cd miner-apps/translator
+cargo run -- -c config-examples/mainnet/tproxy-config-local-jdc-example.toml
 ```
 
 #### **With Hosted Pool**
 ```bash
-cd roles/translator
-cargo run -- -c config-examples/tproxy-config-hosted-pool-example.toml
+cd miner-apps/translator
+cargo run -- -c config-examples/mainnet/tproxy-config-hosted-pool-example.toml
 ```
 
 ### Command Line Options

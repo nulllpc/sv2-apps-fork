@@ -1,10 +1,10 @@
 //! HTTP server for exposing monitoring data using Axum
 
 #[cfg(feature = "asic-rs-telemetry")]
-use super::miner_telemetry::MinerTelemetry;
+use super::miner_telemetry::{MinerTelemetry, MinerTelemetryStatus};
 use super::{
     client::{
-        ExtendedChannelInfo, StandardChannelInfo, Sv2ClientInfo, Sv2ClientMetadata,
+        ExtendedChannelInfo, StandardChannelInfo, Sv2ClientInfo, Sv2ClientKind, Sv2ClientMetadata,
         Sv2ClientsMonitoring, Sv2ClientsSummary,
     },
     prometheus_metrics::PrometheusMetrics,
@@ -39,7 +39,7 @@ use utoipa_swagger_ui::SwaggerUi;
 #[derive(OpenApi)]
 #[cfg_attr(
     feature = "asic-rs-telemetry",
-    openapi(components(schemas(MinerTelemetry)))
+    openapi(components(schemas(MinerTelemetry, MinerTelemetryStatus)))
 )]
 #[openapi(
     info(
@@ -67,6 +67,7 @@ use utoipa_swagger_ui::SwaggerUi;
         Sv2ClientsSummary,
         ServerExtendedChannelInfo,
         ServerStandardChannelInfo,
+        Sv2ClientKind,
         Sv2ClientInfo,
         Sv2ClientMetadata,
         ExtendedChannelInfo,
@@ -351,11 +352,17 @@ pub struct Sv2ClientsResponse {
 #[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct Sv2ClientResponse {
     pub client_id: usize,
+    pub client_kind: Sv2ClientKind,
     pub extended_channels_count: usize,
     pub standard_channels_count: usize,
     pub total_hashrate: f32,
     #[cfg(feature = "asic-rs-telemetry")]
+    #[schema(value_type = Option<String>)]
+    pub management_ip: Option<std::net::IpAddr>,
+    #[cfg(feature = "asic-rs-telemetry")]
     pub miner_telemetry: Option<MinerTelemetry>,
+    #[cfg(feature = "asic-rs-telemetry")]
+    pub miner_telemetry_status: Option<MinerTelemetryStatus>,
 }
 
 #[derive(Serialize, Deserialize, Debug, ToSchema)]
@@ -648,11 +655,16 @@ async fn handle_client_by_id(
     match sv2_clients.iter().find(|c| c.client_id == client_id) {
         Some(client) => Json(Sv2ClientResponse {
             client_id,
+            client_kind: client.client_kind,
             extended_channels_count: client.extended_channels.len(),
             standard_channels_count: client.standard_channels.len(),
             total_hashrate: client.total_hashrate(),
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: client.management_ip,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: client.miner_telemetry.clone(),
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: client.miner_telemetry_status,
         })
         .into_response(),
         None => (
@@ -986,12 +998,16 @@ mod tests {
             connection_ip: format!("192.0.2.{}", id)
                 .parse()
                 .expect("test IP address must be valid"),
+            #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
             authorized_worker_name: format!("worker-{}", id),
             user_identity: format!("miner-{}", id),
             target_hex: "00ff".into(),
             hashrate,
             #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
             stable_hashrate: false,
             extranonce1_hex: "aabb".into(),
             extranonce2_len: 8,
@@ -1239,10 +1255,15 @@ mod tests {
         }));
         let clients = Arc::new(MockClients(vec![Sv2ClientInfo {
             client_id: 1,
+            client_kind: Sv2ClientKind::Miner,
             extended_channels: vec![create_extended_channel_info(1, 50.0)],
             standard_channels: vec![],
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
         }]));
 
         let app = build_test_app(
@@ -1361,17 +1382,27 @@ mod tests {
         let clients = Arc::new(MockClients(vec![
             Sv2ClientInfo {
                 client_id: 1,
+                client_kind: Sv2ClientKind::Miner,
                 extended_channels: vec![create_extended_channel_info(1, 100.0)],
                 standard_channels: vec![],
                 #[cfg(feature = "asic-rs-telemetry")]
+                management_ip: None,
+                #[cfg(feature = "asic-rs-telemetry")]
                 miner_telemetry: Some(create_miner_telemetry()),
+                #[cfg(feature = "asic-rs-telemetry")]
+                miner_telemetry_status: Some(MinerTelemetryStatus::Matched),
             },
             Sv2ClientInfo {
                 client_id: 2,
+                client_kind: Sv2ClientKind::Miner,
                 extended_channels: vec![],
                 standard_channels: vec![create_standard_channel_info(1, 50.0)],
                 #[cfg(feature = "asic-rs-telemetry")]
+                management_ip: None,
+                #[cfg(feature = "asic-rs-telemetry")]
                 miner_telemetry: None,
+                #[cfg(feature = "asic-rs-telemetry")]
+                miner_telemetry_status: None,
             },
         ]));
 
@@ -1388,6 +1419,7 @@ mod tests {
         assert_eq!(resp.total, 2);
         assert_eq!(resp.items.len(), 2);
         assert_eq!(resp.items[0].client_id, 1);
+        assert_eq!(resp.items[0].client_kind, Sv2ClientKind::Miner);
         #[cfg(feature = "asic-rs-telemetry")]
         assert_eq!(
             resp.items[0]
@@ -1402,10 +1434,15 @@ mod tests {
     async fn client_by_id_found() {
         let clients = Arc::new(MockClients(vec![Sv2ClientInfo {
             client_id: 42,
+            client_kind: Sv2ClientKind::Miner,
             extended_channels: vec![create_extended_channel_info(1, 100.0)],
             standard_channels: vec![create_standard_channel_info(2, 50.0)],
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: Some(create_miner_telemetry()),
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: Some(MinerTelemetryStatus::Matched),
         }]));
 
         let app = build_test_app(
@@ -1422,6 +1459,7 @@ mod tests {
         let body = get_body(response).await;
         let resp: Sv2ClientResponse = serde_json::from_str(&body).unwrap();
         assert_eq!(resp.client_id, 42);
+        assert_eq!(resp.client_kind, Sv2ClientKind::Miner);
         assert_eq!(resp.extended_channels_count, 1);
         assert_eq!(resp.standard_channels_count, 1);
         #[cfg(feature = "asic-rs-telemetry")]
@@ -1437,10 +1475,15 @@ mod tests {
     async fn client_by_id_not_found() {
         let clients = Arc::new(MockClients(vec![Sv2ClientInfo {
             client_id: 1,
+            client_kind: Sv2ClientKind::Miner,
             extended_channels: vec![],
             standard_channels: vec![],
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
         }]));
 
         let app = build_test_app(
@@ -1459,6 +1502,7 @@ mod tests {
     async fn client_channels_with_pagination() {
         let clients = Arc::new(MockClients(vec![Sv2ClientInfo {
             client_id: 1,
+            client_kind: Sv2ClientKind::Miner,
             extended_channels: vec![
                 create_extended_channel_info(10, 100.0),
                 create_extended_channel_info(11, 200.0),
@@ -1466,7 +1510,11 @@ mod tests {
             ],
             standard_channels: vec![create_standard_channel_info(20, 50.0)],
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
         }]));
 
         let app = build_test_app(
@@ -1569,10 +1617,15 @@ mod tests {
         }));
         let clients = Arc::new(MockClients(vec![Sv2ClientInfo {
             client_id: 1,
+            client_kind: Sv2ClientKind::Miner,
             extended_channels: vec![create_extended_channel_info(1, 50.0)],
             standard_channels: vec![],
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
         }]));
 
         let app = build_test_app(
@@ -1626,10 +1679,15 @@ mod tests {
 
         let initial_clients = vec![Sv2ClientInfo {
             client_id: 1,
+            client_kind: Sv2ClientKind::Miner,
             extended_channels: vec![create_extended_channel_info(1, 100.0), channel_2],
             standard_channels: vec![],
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
         }];
 
         let mock_clients = Arc::new(MutableMockClients(Mutex::new(initial_clients)));
@@ -1735,10 +1793,15 @@ mod tests {
         // Client channel with zero rejections
         let clients = Arc::new(MockClients(vec![Sv2ClientInfo {
             client_id: 1,
+            client_kind: Sv2ClientKind::Miner,
             extended_channels: vec![create_extended_channel_info(1, 100.0)],
             standard_channels: vec![],
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
         }]));
 
         let app = build_test_app(
@@ -1814,10 +1877,15 @@ mod tests {
         // Client monitoring is available but the specific client_id does not exist
         let clients = Arc::new(MockClients(vec![Sv2ClientInfo {
             client_id: 1,
+            client_kind: Sv2ClientKind::Miner,
             extended_channels: vec![],
             standard_channels: vec![],
             #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
+            #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
         }]));
 
         let app = build_test_app(
@@ -1867,24 +1935,39 @@ mod tests {
         let clients = Arc::new(MockClients(vec![
             Sv2ClientInfo {
                 client_id: 1,
+                client_kind: Sv2ClientKind::Miner,
                 extended_channels: vec![create_extended_channel_info(1, 100.0)],
                 standard_channels: vec![],
                 #[cfg(feature = "asic-rs-telemetry")]
+                management_ip: None,
+                #[cfg(feature = "asic-rs-telemetry")]
                 miner_telemetry: None,
+                #[cfg(feature = "asic-rs-telemetry")]
+                miner_telemetry_status: None,
             },
             Sv2ClientInfo {
                 client_id: 2,
+                client_kind: Sv2ClientKind::Miner,
                 extended_channels: vec![],
                 standard_channels: vec![create_standard_channel_info(1, 50.0)],
                 #[cfg(feature = "asic-rs-telemetry")]
+                management_ip: None,
+                #[cfg(feature = "asic-rs-telemetry")]
                 miner_telemetry: None,
+                #[cfg(feature = "asic-rs-telemetry")]
+                miner_telemetry_status: None,
             },
             Sv2ClientInfo {
                 client_id: 3,
+                client_kind: Sv2ClientKind::Miner,
                 extended_channels: vec![create_extended_channel_info(2, 200.0)],
                 standard_channels: vec![],
                 #[cfg(feature = "asic-rs-telemetry")]
+                management_ip: None,
+                #[cfg(feature = "asic-rs-telemetry")]
                 miner_telemetry: None,
+                #[cfg(feature = "asic-rs-telemetry")]
+                miner_telemetry_status: None,
             },
         ]));
 

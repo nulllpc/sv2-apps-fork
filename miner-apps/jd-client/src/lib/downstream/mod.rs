@@ -6,10 +6,9 @@ use std::{
     time::Duration,
 };
 
-#[cfg(feature = "monitoring")]
-use std::net::IpAddr;
-
 use async_channel::{unbounded, Receiver, Sender};
+#[cfg(feature = "monitoring")]
+use stratum_apps::monitoring::client::Sv2ClientKind;
 use stratum_apps::{
     bitcoin_core_sv2::CancellationToken,
     channel_utils::ReceiverCleanup,
@@ -67,7 +66,7 @@ impl DownstreamIo {
 #[derive(Clone)]
 pub struct Downstream {
     #[cfg(feature = "monitoring")]
-    pub connection_ip: IpAddr,
+    pub client_kind: SharedLock<Sv2ClientKind>,
     /// Whether the downstream requires standard jobs.
     pub require_std_job: Arc<AtomicBool>,
     pub group_channel: SharedLock<GroupChannel<'static>>,
@@ -168,7 +167,6 @@ impl Downstream {
         task_manager: Arc<TaskManager>,
         supported_extensions: Vec<u16>,
         required_extensions: Vec<u16>,
-        #[cfg(feature = "monitoring")] connection_ip: IpAddr,
     ) -> Self {
         let (noise_stream_reader, noise_stream_writer) = noise_stream.into_split();
         let (inbound_tx, inbound_rx) = unbounded::<Sv2Frame>();
@@ -197,7 +195,7 @@ impl Downstream {
         Downstream {
             downstream_io,
             #[cfg(feature = "monitoring")]
-            connection_ip,
+            client_kind: SharedLock::new(Sv2ClientKind::Unknown),
             require_std_job: Arc::new(AtomicBool::new(false)),
             group_channel: SharedLock::new(group_channel),
             extended_channels: SharedMap::new(),

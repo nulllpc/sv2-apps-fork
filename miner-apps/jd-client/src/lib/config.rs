@@ -57,12 +57,21 @@ pub struct JobDeclaratorClientConfig {
     monitoring_address: Option<SocketAddr>,
     #[serde(default)]
     monitoring_cache_refresh_secs: Option<u64>,
+    #[serde(default)]
+    miner_telemetry: MinerTelemetryConfig,
     /// Minimum rollable extranonce bytes JDC reserves for future extended downstreams on its
     /// single upstream channel (fixed at first open). Defaults to
     /// [`DEFAULT_RESERVED_DOWNSTREAM_ROLLABLE_EXTRANONCE_SIZE`] (8) when omitted; set higher if
     /// downstreams may request more.
     #[serde(default = "default_reserved_downstream_rollable_extranonce_size")]
     reserved_downstream_rollable_extranonce_size: u8,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct MinerTelemetryConfig {
+    /// Private IPv4 CIDRs to scan for miner management interfaces.
+    #[serde(default)]
+    pub cidrs: Vec<String>,
 }
 
 /// Default value used by
@@ -112,6 +121,7 @@ impl JobDeclaratorClientConfig {
             required_extensions,
             monitoring_address,
             monitoring_cache_refresh_secs,
+            miner_telemetry: MinerTelemetryConfig::default(),
             reserved_downstream_rollable_extranonce_size:
                 reserved_downstream_rollable_extranonce_size
                     .unwrap_or(DEFAULT_RESERVED_DOWNSTREAM_ROLLABLE_EXTRANONCE_SIZE),
@@ -126,6 +136,11 @@ impl JobDeclaratorClientConfig {
     /// Returns the monitoring cache refresh interval in seconds.
     pub fn monitoring_cache_refresh_secs(&self) -> Option<u64> {
         self.monitoring_cache_refresh_secs
+    }
+
+    /// Returns the miner management CIDRs used for telemetry discovery.
+    pub fn miner_telemetry_cidrs(&self) -> &[String] {
+        &self.miner_telemetry.cidrs
     }
 
     /// Returns the listening address of the Job Declarator Client.

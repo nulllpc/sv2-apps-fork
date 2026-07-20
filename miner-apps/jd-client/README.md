@@ -91,19 +91,52 @@ For connections with a Sv2 Template Provider, you may want to verify that your T
 
 Make sure the machine running the JDC has its clock synced with an NTP server. Certificate validation is time-sensitive, and even a small drift of a few seconds can trigger an `InvalidCertificate` error.
 
+### Miner Telemetry
+
+JDC can enrich the monitoring API with telemetry from SV2 ASIC miners that connect directly to JDC.
+This lets the UI show each miner's management IP, firmware, hashrate, power, temperature, uptime,
+and mining status.
+
+Set `[miner_telemetry].cidrs` to the LAN subnet that contains the miners' web/API addresses. For
+example, if a Bitaxe web UI is available at `192.168.1.63`, use:
+
+```toml
+monitoring_address = "0.0.0.0:9091"
+monitoring_cache_refresh_secs = 15
+
+# LAN subnet containing ASIC miner web/API addresses (for example, 192.168.1.0/24).
+[miner_telemetry]
+cidrs = ["192.168.1.0/24"]
+```
+
+Use the miner's LAN subnet, not the Docker subnet and not JDC's own IP. JDC scans that subnet and
+assigns telemetry to a connected SV2 miner when the username configured in the miner's pool settings
+matches the user identity on the miner's SV2 channel and the miner's pool port matches JDC's
+listening port.
+
+If SV1 miners connect to Translator Proxy and Translator Proxy connects to JDC, configure miner
+telemetry on Translator Proxy instead. JDC identifies Translator Proxy as a proxy client, not as the
+ASICs behind it.
+
+Keep pool usernames/worker names unique for connected miners. If two connected miners use the same
+name, telemetry is not assigned to either of them and the monitoring API reports
+`duplicate_worker_name`.
+
 ### Run
 
-There are four example configuration files found in `pool-apps/jd-client/config-examples`/:
+Example configuration files are available under `miner-apps/jd-client/config-examples/<network>/`.
+Common choices include:
 
 1. `jdc-config-hosted-infra-example.toml` - Connects to a community hosted infra (Pool + JDS + Sv2 TP)
 2. `jdc-config-local-infra-example.toml` - Connects to a local infra (Pool + JDS + Sv2 TP)
 3. `jdc-config-bitcoin-core-ipc-hosted-infra-example.toml` - Connects to a local Bitcoin Core via IPC, and a community hosted infra (Pool + JDS)
 4. `jdc-config-bitcoin-core-ipc-local-infra-example.toml` - Connects to a local Bitcoin Core via IPC, and a local infra (Pool + JDS)
+5. `jdc-config-solo-mining-example.toml` - Runs JDC in solo mining mode
 
 Run JDC (example using hosted infra):
 ```bash
 cd miner-apps/jd-client
-cargo run -- -c config-examples/jdc-config-bitcoin-core-ipc-hosted-infra-example.toml
+cargo run -- -c config-examples/mainnet/jdc-config-bitcoin-core-ipc-hosted-infra-example.toml
 ```
 
 ## Architecture Details

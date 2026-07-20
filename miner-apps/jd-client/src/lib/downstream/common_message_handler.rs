@@ -3,6 +3,8 @@ use crate::{
     error::{self, JDCError, JDCErrorKind},
 };
 use std::{convert::TryInto, sync::atomic::Ordering};
+#[cfg(feature = "monitoring")]
+use stratum_apps::monitoring::client::Sv2ClientKind;
 use stratum_apps::{
     stratum_core::{
         common_messages_sv2::{
@@ -110,6 +112,19 @@ impl HandleCommonMessagesFromClientAsync for Downstream {
         if has_requires_std_job(msg.flags) {
             self.require_std_job.store(true, Ordering::Relaxed);
         }
+
+        #[cfg(feature = "monitoring")]
+        {
+            let vendor = msg.vendor.as_utf8_or_hex();
+            let hardware_version = msg.hardware_version.as_utf8_or_hex();
+            self.client_kind
+                .set(Sv2ClientKind::from_setup_connection(
+                    &vendor,
+                    &hardware_version,
+                ))
+                .map_err(JDCError::shutdown)?;
+        }
+
         let response = SetupConnectionSuccess {
             used_version: 2,
             flags: 0, // !REQUIRES_FIXED_VERSION, !REQUIRES_EXTENDED_CHANNELS

@@ -9,15 +9,26 @@ use hex;
 use stratum_apps::{
     bitcoin_core_sv2::CancellationToken,
     monitoring::{
-        client::{ExtendedChannelInfo, StandardChannelInfo, Sv2ClientInfo, Sv2ClientsMonitoring},
+        client::{
+            ExtendedChannelInfo, StandardChannelInfo, Sv2ClientInfo, Sv2ClientKind,
+            Sv2ClientsMonitoring,
+        },
+        match_discovered_miners_to_downstreams_by_worker_and_port,
         server::{ServerExtendedChannelInfo, ServerInfo, ServerMonitoring},
-        MinerTelemetry, MinerTelemetryCollector,
+        DiscoveredMiner, MinerTelemetry, MinerTelemetryCollector, MinerTelemetryStatus,
     },
+    utils::types::DownstreamId,
 };
 
 use crate::{channel_manager::ChannelManager, downstream::Downstream};
-use std::{collections::HashSet, net::IpAddr, time::Duration};
-use tracing::info;
+use std::{
+    collections::HashSet,
+    net::IpAddr,
+    time::{Duration, Instant},
+};
+use tracing::{debug, info};
+
+const MINER_TELEMETRY_DISCOVERY_INTERVAL: Duration = Duration::from_secs(60);
 
 impl ServerMonitoring for ChannelManager {
     fn get_server(&self) -> ServerInfo {
@@ -75,9 +86,12 @@ impl ServerMonitoring for ChannelManager {
 fn downstream_to_sv2_client_info(
     client: &Downstream,
     miner_telemetry: Option<MinerTelemetry>,
+    management_ip: Option<IpAddr>,
+    miner_telemetry_status: Option<MinerTelemetryStatus>,
 ) -> Option<Sv2ClientInfo> {
     let mut extended_channels = Vec::new();
     let mut standard_channels = Vec::new();
+    let client_kind = client.client_kind.get().ok()?;
 
     client
         .extended_channels
@@ -151,9 +165,12 @@ fn downstream_to_sv2_client_info(
 
     Some(Sv2ClientInfo {
         client_id: client.downstream_id,
+        client_kind,
         extended_channels,
         standard_channels,
+        management_ip,
         miner_telemetry,
+        miner_telemetry_status,
     })
 }
 
@@ -168,17 +185,27 @@ impl Sv2ClientsMonitoring for ChannelManager {
             .filter_map(|downstream| {
                 downstream_to_sv2_client_info(
                     downstream,
-                    self.miner_telemetry.get_cloned(&downstream.downstream_id),
+                    self.miner_telemetry.telemetry_for(downstream.downstream_id),
+                    self.miner_telemetry
+                        .management_ip_for(downstream.downstream_id),
+                    self.miner_telemetry.status_for(downstream.downstream_id),
                 )
             })
             .collect()
     }
 
     fn get_sv2_client_by_id(&self, client_id: usize) -> Option<Sv2ClientInfo> {
-        let miner_telemetry = self.miner_telemetry.get_cloned(&client_id);
+        let miner_telemetry = self.miner_telemetry.telemetry_for(client_id);
+        let management_ip = self.miner_telemetry.management_ip_for(client_id);
+        let miner_telemetry_status = self.miner_telemetry.status_for(client_id);
         self.downstream
             .with(&client_id, |downstream| {
-                downstream_to_sv2_client_info(downstream, miner_telemetry)
+                downstream_to_sv2_client_info(
+                    downstream,
+                    miner_telemetry,
+                    management_ip,
+                    miner_telemetry_status,
+                )
             })
             .unwrap_or(None)
     }
@@ -191,13 +218,29 @@ impl ChannelManager {
         cancellation_token: CancellationToken,
         fallback_token: CancellationToken,
     ) {
+        let discovery_cidrs = self
+            .miner_telemetry
+            .cidrs
+            .iter()
+            .map(|cidr| cidr.trim())
+            .filter(|cidr| !cidr.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if discovery_cidrs.is_empty() {
+            info!("JDC miner telemetry discovery disabled: no miner_telemetry cidrs configured");
+            return;
+        }
+
         let refresh_interval = refresh_interval.max(Duration::from_secs(1));
         let collector = MinerTelemetryCollector::new();
         let mut interval = tokio::time::interval(refresh_interval);
+        let mut discovered_miners = Vec::new();
+        let mut last_discovery = None::<Instant>;
 
         info!(
-            "Starting JDC miner telemetry loop with interval of {} seconds",
-            refresh_interval.as_secs()
+            "Starting JDC miner telemetry loop with interval of {} seconds and discovery interval of {} seconds",
+            refresh_interval.as_secs(),
+            MINER_TELEMETRY_DISCOVERY_INTERVAL.as_secs()
         );
 
         loop {
@@ -220,48 +263,140 @@ impl ChannelManager {
                             info!("JDC miner telemetry loop received fallback signal");
                             break;
                         }
-                        _ = self.refresh_miner_telemetry(&collector) => {}
+                        _ = async {
+                            let should_discover = last_discovery
+                                .map(|last| last.elapsed() >= MINER_TELEMETRY_DISCOVERY_INTERVAL)
+                                .unwrap_or(true);
+
+                            if should_discover {
+                                discovered_miners = collector.discover(&discovery_cidrs).await;
+                                debug!(
+                                    "JDC miner telemetry discovery found {} miner management interfaces",
+                                    discovered_miners.len()
+                                );
+                                last_discovery = Some(Instant::now());
+                            }
+
+                            self.refresh_miner_telemetry(&collector, &discovered_miners).await;
+                        } => {}
                     }
                 }
             }
         }
     }
 
-    async fn refresh_miner_telemetry(&self, collector: &MinerTelemetryCollector) {
-        let downstreams = self.current_downstream_connection_ips();
+    async fn refresh_miner_telemetry(
+        &self,
+        collector: &MinerTelemetryCollector,
+        discovered_miners: &[DiscoveredMiner],
+    ) {
+        let downstreams = self.current_downstream_user_identities();
         let active_downstream_ids = downstreams
             .iter()
             .map(|(downstream_id, _)| *downstream_id)
             .collect::<HashSet<_>>();
+        debug!(
+            ?downstreams,
+            ?discovered_miners,
+            pool_port = self.miner_telemetry.pool_port,
+            "JDC miner telemetry matching discovered active pool users to SV2 channel user identities and listening port"
+        );
+        let match_result = match_discovered_miners_to_downstreams_by_worker_and_port(
+            &downstreams,
+            discovered_miners,
+            self.miner_telemetry.pool_port,
+        );
+        let matched_management_ips = match_result.management_ips_by_downstream_id;
 
+        if matched_management_ips.is_empty()
+            && !downstreams.is_empty()
+            && !discovered_miners.is_empty()
+        {
+            debug!(
+                "JDC miner telemetry discovered {} miner management interfaces but could not match them to {} active downstreams",
+                discovered_miners.len(),
+                downstreams.len()
+            );
+        }
+
+        self.miner_telemetry.telemetry.retain(|downstream_id, _| {
+            active_downstream_ids.contains(downstream_id)
+                && matched_management_ips.contains_key(downstream_id)
+        });
         self.miner_telemetry
+            .management_ips
+            .retain(|downstream_id, _| {
+                active_downstream_ids.contains(downstream_id)
+                    && matched_management_ips.contains_key(downstream_id)
+            });
+        self.miner_telemetry
+            .statuses
             .retain(|downstream_id, _| active_downstream_ids.contains(downstream_id));
+
+        for (downstream_id, status) in match_result.statuses_by_downstream_id {
+            self.miner_telemetry.statuses.insert(downstream_id, status);
+        }
 
         if downstreams.is_empty() {
             return;
         }
 
-        for (downstream_id, ip) in downstreams {
+        for (downstream_id, ip) in matched_management_ips {
+            self.miner_telemetry
+                .management_ips
+                .insert(downstream_id, ip);
+
             match collector.fetch(ip).await {
                 Some(telemetry) => {
                     let is_active = self.downstream.contains_key(&downstream_id);
 
                     if is_active {
-                        self.miner_telemetry.insert(downstream_id, telemetry);
+                        self.miner_telemetry
+                            .telemetry
+                            .insert(downstream_id, telemetry);
+                        self.miner_telemetry
+                            .statuses
+                            .insert(downstream_id, MinerTelemetryStatus::Matched);
                     }
                 }
                 None => {
-                    self.miner_telemetry.remove(&downstream_id);
+                    self.miner_telemetry.telemetry.remove(&downstream_id);
+                    self.miner_telemetry
+                        .statuses
+                        .insert(downstream_id, MinerTelemetryStatus::FetchFailed);
                 }
             }
         }
     }
 
-    fn current_downstream_connection_ips(&self) -> Vec<(usize, IpAddr)> {
-        let mut downstream_connection = Vec::new();
+    fn current_downstream_user_identities(&self) -> Vec<(DownstreamId, String)> {
+        let mut downstream_workers = Vec::new();
         self.downstream.for_each(|_, downstream| {
-            downstream_connection.push((downstream.downstream_id, downstream.connection_ip))
+            let Some(client_kind) = downstream.client_kind.get().ok() else {
+                return;
+            };
+            if matches!(client_kind, Sv2ClientKind::TranslatorProxy) {
+                return;
+            }
+
+            let mut workers = Vec::new();
+            downstream
+                .extended_channels
+                .for_each(|_, channel| workers.push(channel.get_user_identity().to_string()));
+            downstream
+                .standard_channels
+                .for_each(|_, channel| workers.push(channel.get_user_identity().to_string()));
+            workers.sort();
+            workers.dedup();
+
+            let worker = if workers.len() == 1 {
+                workers.remove(0)
+            } else {
+                String::new()
+            };
+
+            downstream_workers.push((downstream.downstream_id, worker));
         });
-        downstream_connection
+        downstream_workers
     }
 }

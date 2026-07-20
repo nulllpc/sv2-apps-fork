@@ -29,7 +29,10 @@ pub use http_server::{
     Sv2ClientsResponse,
 };
 #[cfg(feature = "asic-rs-telemetry")]
-pub use miner_telemetry::{MinerTelemetry, MinerTelemetryCollector};
+pub use miner_telemetry::{
+    match_discovered_miners_to_downstreams_by_worker_and_port, DiscoveredMiner, MinerTelemetry,
+    MinerTelemetryCollector, MinerTelemetryDownstreamMatches, MinerTelemetryStatus,
+};
 pub use server::{
     ServerExtendedChannelInfo, ServerInfo, ServerMonitoring, ServerStandardChannelInfo,
     ServerSummary,

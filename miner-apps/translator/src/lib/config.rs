@@ -61,6 +61,15 @@ pub struct TranslatorConfig {
     monitoring_address: Option<SocketAddr>,
     #[serde(default)]
     monitoring_cache_refresh_secs: Option<u64>,
+    #[serde(default)]
+    miner_telemetry: MinerTelemetryConfig,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct MinerTelemetryConfig {
+    /// Private IPv4 CIDRs to scan for miner management interfaces.
+    #[serde(default)]
+    pub cidrs: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -128,6 +137,7 @@ impl TranslatorConfig {
             log_file: None,
             monitoring_address,
             monitoring_cache_refresh_secs,
+            miner_telemetry: MinerTelemetryConfig::default(),
         }
     }
 
@@ -139,6 +149,11 @@ impl TranslatorConfig {
     /// Returns the monitoring cache refresh interval in seconds.
     pub fn monitoring_cache_refresh_secs(&self) -> Option<u64> {
         self.monitoring_cache_refresh_secs
+    }
+
+    /// Returns the miner management CIDRs used for telemetry discovery.
+    pub fn miner_telemetry_cidrs(&self) -> &[String] {
+        &self.miner_telemetry.cidrs
     }
 
     pub(crate) fn expected_payout_distribution(

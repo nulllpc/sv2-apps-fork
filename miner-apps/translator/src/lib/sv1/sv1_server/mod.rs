@@ -29,6 +29,8 @@ use crate::{
 };
 use async_channel::{unbounded, Receiver, Sender};
 use dashmap::DashMap;
+#[cfg(feature = "monitoring")]
+use std::net::IpAddr;
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -39,7 +41,7 @@ use std::{
     time::{Duration, Instant},
 };
 #[cfg(feature = "monitoring")]
-use stratum_apps::monitoring::MinerTelemetry;
+use stratum_apps::monitoring::{MinerTelemetry, MinerTelemetryStatus};
 use stratum_apps::{
     channel_utils::ReceiverCleanup,
     custom_mutex::Mutex,
@@ -117,6 +119,54 @@ impl Sv1ServerIo {
     }
 }
 
+#[cfg(feature = "monitoring")]
+#[derive(Clone)]
+pub(crate) struct MinerTelemetryState {
+    /// Latest telemetry fetched for each matched SV1 downstream connection.
+    pub(crate) telemetry: Arc<DashMap<DownstreamId, MinerTelemetry>>,
+    /// Miner management IP selected for each matched SV1 downstream connection.
+    pub(crate) management_ips: Arc<DashMap<DownstreamId, IpAddr>>,
+    /// Latest telemetry matching status for each active SV1 downstream connection.
+    pub(crate) statuses: Arc<DashMap<DownstreamId, MinerTelemetryStatus>>,
+}
+
+#[cfg(feature = "monitoring")]
+impl MinerTelemetryState {
+    fn new() -> Self {
+        Self {
+            telemetry: Arc::new(DashMap::new()),
+            management_ips: Arc::new(DashMap::new()),
+            statuses: Arc::new(DashMap::new()),
+        }
+    }
+
+    fn clear(&self) {
+        self.telemetry.clear();
+        self.management_ips.clear();
+        self.statuses.clear();
+    }
+
+    fn remove_downstream(&self, downstream_id: DownstreamId) {
+        self.telemetry.remove(&downstream_id);
+        self.management_ips.remove(&downstream_id);
+        self.statuses.remove(&downstream_id);
+    }
+
+    pub(crate) fn telemetry_for(&self, downstream_id: DownstreamId) -> Option<MinerTelemetry> {
+        self.telemetry
+            .get(&downstream_id)
+            .map(|telemetry| telemetry.clone())
+    }
+
+    pub(crate) fn management_ip_for(&self, downstream_id: DownstreamId) -> Option<IpAddr> {
+        self.management_ips.get(&downstream_id).map(|ip| *ip)
+    }
+
+    pub(crate) fn status_for(&self, downstream_id: DownstreamId) -> Option<MinerTelemetryStatus> {
+        self.statuses.get(&downstream_id).map(|status| *status)
+    }
+}
+
 /// SV1 server that handles connections from SV1 miners.
 ///
 /// This struct manages the SV1 server component of the translator, which:
@@ -140,7 +190,7 @@ pub struct Sv1Server {
     pub(crate) request_id_factory: Arc<AtomicU32>,
     pub(crate) downstreams: Arc<DashMap<DownstreamId, Downstream>>,
     #[cfg(feature = "monitoring")]
-    pub(crate) miner_telemetry: Arc<DashMap<DownstreamId, MinerTelemetry>>,
+    pub(crate) miner_telemetry: MinerTelemetryState,
     pub(crate) request_id_to_downstream_id: Arc<DashMap<RequestId, DownstreamId>>,
     pub(crate) channel_id_to_downstream_id: Arc<Mutex<HashMap<ChannelId, DownstreamId>>>,
     pub(crate) vardiff: Arc<DashMap<DownstreamId, Arc<Mutex<VardiffState>>>>,
@@ -316,7 +366,7 @@ impl Sv1Server {
             request_id_factory: Arc::new(AtomicU32::new(1)),
             downstreams: Arc::new(DashMap::new()),
             #[cfg(feature = "monitoring")]
-            miner_telemetry: Arc::new(DashMap::new()),
+            miner_telemetry: MinerTelemetryState::new(),
             request_id_to_downstream_id: Arc::new(DashMap::new()),
             channel_id_to_downstream_id: Arc::new(Mutex::new(HashMap::new())),
             vardiff: Arc::new(DashMap::new()),
@@ -1041,7 +1091,7 @@ impl Sv1Server {
             self.vardiff.remove(&downstream_id);
         }
         #[cfg(feature = "monitoring")]
-        self.miner_telemetry.remove(&downstream_id);
+        self.miner_telemetry.remove_downstream(downstream_id);
         self.sv1_server_io
             .sv1_server_to_downstream_sender
             .super_safe_lock(|map| map.remove(&downstream_id));

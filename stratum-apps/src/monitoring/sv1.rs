@@ -6,7 +6,7 @@
 use std::net::IpAddr;
 
 #[cfg(feature = "asic-rs-telemetry")]
-pub use super::miner_telemetry::MinerTelemetry;
+pub use super::miner_telemetry::{MinerTelemetry, MinerTelemetryStatus};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -17,6 +17,10 @@ pub struct Sv1ClientInfo {
     pub channel_id: Option<u32>,
     #[schema(value_type = String)]
     pub connection_ip: IpAddr,
+    #[cfg(feature = "asic-rs-telemetry")]
+    /// Miner management IP used for matched telemetry, if discovery found one.
+    #[schema(value_type = Option<String>)]
+    pub management_ip: Option<IpAddr>,
     pub authorized_worker_name: String,
     pub user_identity: String,
     pub target_hex: String,
@@ -27,7 +31,11 @@ pub struct Sv1ClientInfo {
     pub version_rolling_mask: Option<String>,
     pub version_rolling_min_bit: Option<String>,
     #[cfg(feature = "asic-rs-telemetry")]
+    /// Latest telemetry fetched from the matched miner management interface.
     pub miner_telemetry: Option<MinerTelemetry>,
+    #[cfg(feature = "asic-rs-telemetry")]
+    /// Current discovery and fetch status for miner telemetry matching.
+    pub miner_telemetry_status: Option<MinerTelemetryStatus>,
 }
 
 /// Aggregate information about SV1 client connections
@@ -74,6 +82,8 @@ mod tests {
             connection_ip: format!("192.0.2.{}", id)
                 .parse()
                 .expect("test IP address must be valid"),
+            #[cfg(feature = "asic-rs-telemetry")]
+            management_ip: None,
             authorized_worker_name: format!("worker-{}", id),
             user_identity: format!("miner-{}", id),
             target_hex: "00ff".into(),
@@ -85,6 +95,8 @@ mod tests {
             version_rolling_min_bit: Some("00000000".into()),
             #[cfg(feature = "asic-rs-telemetry")]
             miner_telemetry: None,
+            #[cfg(feature = "asic-rs-telemetry")]
+            miner_telemetry_status: None,
         }
     }
 
