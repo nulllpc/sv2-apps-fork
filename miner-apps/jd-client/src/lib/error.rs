@@ -41,6 +41,8 @@ use stratum_apps::{
 };
 use tokio::time::error::Elapsed;
 
+use crate::config::ConfigJDCMode;
+
 pub type JDCResult<T, Owner> = Result<T, JDCError<Owner>>;
 
 #[derive(Debug)]
@@ -59,13 +61,16 @@ pub struct Upstream;
 pub struct Downstream;
 
 #[derive(Debug)]
+pub struct JobDeclaratorClient;
+
+#[derive(Debug)]
 pub struct JDCError<Owner> {
     pub kind: JDCErrorKind,
     pub action: Action,
     _owner: PhantomData<Owner>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Log,
     Disconnect(DownstreamId),
@@ -85,12 +90,14 @@ impl CanDisconnect for ChannelManager {}
 impl CanFallback for Upstream {}
 impl CanFallback for JobDeclarator {}
 impl CanFallback for ChannelManager {}
+impl CanFallback for JobDeclaratorClient {}
 
 impl CanShutdown for ChannelManager {}
 impl CanShutdown for TemplateProvider {}
 impl CanShutdown for Downstream {}
 impl CanShutdown for Upstream {}
 impl CanShutdown for JobDeclarator {}
+impl CanShutdown for JobDeclaratorClient {}
 
 impl<O> JDCError<O> {
     pub fn log<E: Into<JDCErrorKind>>(kind: E) -> Self {
@@ -259,6 +266,12 @@ pub enum JDCErrorKind {
     InvalidKey,
     /// Upstream not found
     UpstreamNotFound,
+    /// Cannot determine Bitcoin data directory
+    InvalidBitcoinDataDir,
+    /// No upstream specified for pooled mining
+    NoUpstreamConfig(ConfigJDCMode),
+    /// Invalid coinbase output in config
+    InvalidCoinbaseOuput,
 }
 
 impl std::error::Error for JDCErrorKind {}
@@ -399,6 +412,15 @@ impl fmt::Display for JDCErrorKind {
             CouldNotInitiateSystem => write!(f, "Could not initiate subsystem"),
             InvalidKey => write!(f, "Invalid key used during noise handshake"),
             UpstreamNotFound => write!(f, "Upstream not found"),
+            InvalidBitcoinDataDir => write!(
+                f,
+                "Could not determine Bitcoin data directory. Please set data_dir in config."
+            ),
+            NoUpstreamConfig(mode) => write!(
+                f,
+                "No upstreams configured for {mode:?} mode - at least one upstream is required"
+            ),
+            InvalidCoinbaseOuput => write!(f, "Invalid coinbase output in config"),
         }
     }
 }
