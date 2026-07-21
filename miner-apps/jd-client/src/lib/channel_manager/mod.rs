@@ -755,7 +755,6 @@ impl ChannelManager {
                     }
                     _ = fallback_token.cancelled() => {
                         info!("Channel Manager: fallback triggered");
-                        self.upstream_state.set(UpstreamState::SoloMining);
                         break;
                     }
                     res = &mut vardiff_future => {
