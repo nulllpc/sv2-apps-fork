@@ -16,7 +16,6 @@ use stratum_apps::{
             merkle_root::merkle_root_from_path,
             target::{bytes_to_hex, u256_to_block_hash},
         },
-        stratum_translation::sv2_to_sv1::sv1_advertised_difficulty_from_sv2_target,
         sv1_api::{
             client_to_server::{self, Submit},
             json_rpc,
@@ -289,46 +288,4 @@ pub(crate) fn tlv_compatible_username(s: &str) -> &str {
         s, MAX_USER_IDENTITY_BYTES, len, truncated
     );
     truncated
-}
-
-/// Target corresponding to the difficulty actually advertised downstream for
-/// `upstream_target` under integer power-of-two `mining.set_difficulty`
-/// rounding. For a power-of-two difficulty `d` this is diff1 >> log2(d), which
-/// matches the target any firmware derives from the integer difficulty. Below
-/// the rounding threshold the difficulty passes through unchanged, so the
-/// upstream target itself is returned.
-///
-/// Downstream shares must be validated against this target (what the miner was
-/// told), while `upstream_target` decides which of those shares are forwarded:
-/// with difficulty rounded down, shares in the band between the two are
-/// acknowledged downstream but filtered from upstream submission.
-pub fn advertised_target_from_upstream(upstream_target: Target, rounding_threshold: f64) -> Target {
-    let advertised =
-        match sv1_advertised_difficulty_from_sv2_target(upstream_target, rounding_threshold) {
-            Ok(d) => d,
-            Err(_) => return upstream_target,
-        };
-    if advertised < rounding_threshold || advertised < 1.0 {
-        return upstream_target;
-    }
-
-    let shift = (advertised as u64).trailing_zeros() as usize;
-    // diff1 (difficulty-1 target) in big endian, right-shifted by log2(advertised)
-    let mut be = [0u8; 32];
-    be[4] = 0xff;
-    be[5] = 0xff;
-    let byte_shift = shift / 8;
-    let bit_shift = shift % 8;
-    let mut out = [0u8; 32];
-    for i in (byte_shift..32).rev() {
-        let src = i - byte_shift;
-        let mut byte = be[src] >> bit_shift;
-        if bit_shift > 0 && src > 0 {
-            byte |= be[src - 1] << (8 - bit_shift);
-        }
-        out[i] = byte;
-    }
-    let mut le = out;
-    le.reverse();
-    Target::from_le_bytes(le)
 }

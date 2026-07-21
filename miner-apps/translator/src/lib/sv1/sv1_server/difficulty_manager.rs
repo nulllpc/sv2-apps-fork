@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::sv1::sv1_server::{
     PendingTargetUpdate, SV1_MIN_DIFFICULTY_FOR_INTEGER_POWER_OF_TWO_ROUNDING,
 };
-use crate::utils::advertised_target_from_upstream;
 
 use stratum_apps::{
     stratum_core::{
@@ -11,7 +10,10 @@ use stratum_apps::{
         channels_sv2::{target::hash_rate_to_target, Vardiff},
         mining_sv2::{SetTarget, UpdateChannel},
         parsers_sv2::Mining,
-        stratum_translation::sv2_to_sv1::build_sv1_set_difficulty_from_sv2_target_with_integer_power_of_two_rounding,
+        stratum_translation::sv2_to_sv1::{
+            build_sv1_set_difficulty_from_sv2_target_with_integer_power_of_two_rounding,
+            sv1_advertised_target_from_sv2_target,
+        },
     },
     utils::types::{ChannelId, DownstreamId, Hashrate},
 };
@@ -106,10 +108,11 @@ impl Sv1Server {
                         // Store the advertised (pow2 rounded) target so share
                         // validation matches the difficulty the miner was sent.
                         data.set_pending_target(
-                            advertised_target_from_upstream(
+                            sv1_advertised_target_from_sv2_target(
                                 new_target,
                                 SV1_MIN_DIFFICULTY_FOR_INTEGER_POWER_OF_TWO_ROUNDING,
-                            ),
+                            )
+                            .unwrap_or(new_target),
                             d.downstream_id,
                         );
                         data.set_pending_hashrate(Some(new_hashrate), d.downstream_id);

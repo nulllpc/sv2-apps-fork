@@ -23,8 +23,8 @@ use crate::{
     error::{self, Action, LoopControl, TproxyError, TproxyErrorKind, TproxyResult},
     sv1::downstream::Downstream,
     utils::{
-        advertised_target_from_upstream, is_mining_authorize, SubmitShareWithChannelId,
-        TproxyMode, AGGREGATED_CHANNEL_ID, KEEPALIVE_JOB_ID_DELIMITER,
+        is_mining_authorize, SubmitShareWithChannelId, TproxyMode, AGGREGATED_CHANNEL_ID,
+        KEEPALIVE_JOB_ID_DELIMITER,
     },
 };
 use async_channel::{unbounded, Receiver, Sender};
@@ -65,6 +65,7 @@ use stratum_apps::{
             sv2_to_sv1::{
                 build_sv1_notify_from_sv2,
                 build_sv1_set_difficulty_from_sv2_target_with_integer_power_of_two_rounding,
+                sv1_advertised_target_from_sv2_target,
             },
         },
         sv1_api::{json_rpc, server_to_client, utils::HexU32Be, IsServer},
@@ -1209,10 +1210,11 @@ impl Sv1Server {
                     // rounded) difficulty; upstream_target keeps the exact
                     // pool target for filtering forwarded shares.
                     d.set_pending_target(
-                        advertised_target_from_upstream(
+                        sv1_advertised_target_from_sv2_target(
                             target,
                             SV1_MIN_DIFFICULTY_FOR_INTEGER_POWER_OF_TWO_ROUNDING,
-                        ),
+                        )
+                        .unwrap_or(target),
                         downstream_id,
                     );
                     if let Some(hr) = derived_hashrate {
@@ -1309,10 +1311,11 @@ impl Sv1Server {
             // See send_set_difficulty_to_all_downstreams: validate downstream
             // against the advertised pow2 difficulty, filter with the exact one.
             d.set_pending_target(
-                advertised_target_from_upstream(
+                sv1_advertised_target_from_sv2_target(
                     target,
                     SV1_MIN_DIFFICULTY_FOR_INTEGER_POWER_OF_TWO_ROUNDING,
-                ),
+                )
+                .unwrap_or(target),
                 downstream_id,
             );
             // Update pending hashrate derived from the upstream target
