@@ -37,7 +37,9 @@ use stratum_apps::{
         },
         mining_sv2::{OpenExtendedMiningChannel, SetCustomMiningJob, SetTarget, UpdateChannel},
         parsers_sv2::{AnyMessage, JobDeclaration, Mining, TemplateDistribution, Tlv},
-        template_distribution_sv2::{NewTemplate, SetNewPrevHash as SetNewPrevHashTdp},
+        template_distribution_sv2::{
+            NewTemplate, RequestTransactionData, SetNewPrevHash as SetNewPrevHashTdp,
+        },
     },
     sync::{SharedLock, SharedMap},
     task_manager::TaskManager,
@@ -1193,6 +1195,25 @@ impl ChannelManager {
             }
         }
 
+        Ok(())
+    }
+
+    /// Sends a transaction-data request for the template.
+    ///
+    /// Only call this when the response can be consumed (i.e., `UpstreamState::Connected`
+    /// in full-template mode). Templates received before the upstream channel opens are
+    /// covered by the re-request in `handle_open_extended_mining_channel_success`.
+    async fn request_transaction_data(
+        &self,
+        template_id: TemplateId,
+    ) -> JDCResult<(), error::ChannelManager> {
+        let message =
+            TemplateDistribution::RequestTransactionData(RequestTransactionData { template_id });
+        self.channel_manager_io
+            .tp_sender
+            .send(message)
+            .await
+            .map_err(|_e| JDCError::shutdown(JDCErrorKind::ChannelErrorSender))?;
         Ok(())
     }
 
