@@ -1208,7 +1208,7 @@ impl Sv1Server {
                     d.set_upstream_target(target, downstream_id);
                     // Downstream validation must use the advertised (pow2
                     // rounded) difficulty; upstream_target keeps the exact
-                    // pool target for filtering forwarded shares.
+                    // pool target for vardiff comparisons.
                     d.set_pending_target(
                         sv1_advertised_target_from_sv2_target(
                             target,
@@ -1308,8 +1308,8 @@ impl Sv1Server {
         };
         downstream.downstream_data.super_safe_lock(|d| {
             d.set_upstream_target(target, downstream_id);
-            // See send_set_difficulty_to_all_downstreams: validate downstream
-            // against the advertised pow2 difficulty, filter with the exact one.
+            // See send_set_difficulty_to_all_downstreams: downstream validation
+            // uses the advertised pow2 difficulty.
             d.set_pending_target(
                 sv1_advertised_target_from_sv2_target(
                     target,
