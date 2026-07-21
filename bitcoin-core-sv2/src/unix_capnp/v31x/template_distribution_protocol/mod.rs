@@ -49,8 +49,6 @@ use tracing::{debug, error, info, warn};
 
 pub mod error;
 mod handlers;
-#[allow(clippy::duplicate_mod)]
-#[path = "../../v31x_v30x/template_distribution_protocol/monitors.rs"]
 mod monitors;
 mod template_data;
 
