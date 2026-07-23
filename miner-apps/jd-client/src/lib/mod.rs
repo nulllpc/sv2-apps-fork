@@ -45,7 +45,14 @@ impl JobDeclaratorClient {
         }
     }
 
-    /// Starts the Job Declarator Client (JDC) main loop.
+    /// Starts the main event loop for the Job Declarator Client (JDC).
+    ///
+    /// The startup and execution sequence follows:
+    /// 1. **Initialize:** Sets up the JDC runtime state machine ([`JdcRuntime`]).
+    /// 2. **Bootstrap:** Configures internal channels, connects to the Template Provider, initializes the Channel Manager,
+    ///    and establishes upstream SV2 connections or solo mining.
+    /// 3. **Run & Loop:** Spawns active background loops/servers and handles fallbacks or graceful shutdown.
+    /// 4. **Teardown:** Performs a coordinated graceful cleanup of all services and tasks upon termination.
     pub async fn start(&self) {
         let runtime = match JdcRuntime::<Init>::new(self.clone()) {
             Ok(runtime) => runtime,

@@ -1,3 +1,8 @@
+//! ## JDC Runtime Module
+//!
+//! Provides [`JdcRuntime`], a structured state-machine orchestrating the Job Declarator
+//! Client's (JDC) initialization, bootstrap stages, background service loops, and graceful teardown or fallback.
+
 use std::{
     sync::{atomic::Ordering, Arc},
     thread::JoinHandle,
@@ -57,6 +62,10 @@ struct BitcoinCoreSv2Handle {
     cancellation_token: CancellationToken,
 }
 
+/// The core coordinator of the JDC runtime, parameterized by its current bootstrap `State`.
+///
+/// It manages the lifecycle of essential sub-services and channels, ensuring resources
+/// are correctly initialized, passed to background executors, and cleanly torn down.
 pub(super) struct JdcRuntime<State> {
     miner_coinbase_outputs: Vec<TxOut>,
     encoded_outputs: Vec<u8>,
@@ -240,6 +249,10 @@ impl<State> JdcRuntime<State> {
         }
     }
 
+    /// Performs a coordinated, graceful shutdown of the runtime.
+    ///
+    /// Signals cancellation to all active sub-services and background tasks, awaiting
+    /// their clean termination up to a configured graceful timeout.
     pub async fn shutdown(self) {
         self.jd_client.cancellation_token.cancel();
 
@@ -323,6 +336,11 @@ impl JdcRuntime<Init> {
         })
     }
 
+    /// Drives the linear bootstrap sequence of the JDC, transitioning the runtime
+    /// from [`Init`] to the active [`Running`] state.
+    ///
+    /// If an intermediate phase fails, the caller receives the partially initialized
+    /// runtime and is responsible for shutting down any resources that were already started.
     pub async fn bootstrap(self) -> Result<JdcRuntime<Running>, BootstrapError> {
         let runtime = self.bootstrap_io();
 
@@ -767,6 +785,8 @@ impl JdcRuntime<ChannelManagerReady> {
 }
 
 impl JdcRuntime<UpstreamReady> {
+    /// Activates the background execution loops of the [`ChannelManager`], downstream server, and monitoring server,
+    /// transitioning the runtime to [`Running`].
     async fn start_services(self) -> JdcRuntime<Running> {
         self.start_services_inner(&self.state.io, self.state.channel_manager.clone())
             .await;
@@ -786,6 +806,8 @@ impl JdcRuntime<UpstreamReady> {
 }
 
 impl JdcRuntime<SoloMiningReady> {
+    /// Activates the background execution loops of the [`ChannelManager`], downstream server, and monitoring server,
+    /// transitioning the runtime to [`Running`].
     async fn start_services(self) -> JdcRuntime<Running> {
         self.start_services_inner(&self.state.io, self.state.channel_manager.clone())
             .await;
