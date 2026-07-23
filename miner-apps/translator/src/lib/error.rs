@@ -52,7 +52,7 @@ pub struct TproxyError<Owner> {
     _owner: PhantomData<Owner>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Log,
     Disconnect(DownstreamId),
