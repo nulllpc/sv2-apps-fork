@@ -1,3 +1,8 @@
+//! ## Translator Runtime Module
+//!
+//! Provides [`TranslatorRuntime`], a structured state-machine orchestrating the translator proxy's
+//! initialization, bootstrap stages, background service loops, and graceful teardown or fallback.
+
 use std::{
     net::SocketAddr,
     sync::{atomic::Ordering, Arc},
@@ -33,6 +38,10 @@ struct Io {
     sv1_server_to_channel_manager_receiver: Receiver<(Mining<'static>, Option<Vec<Tlv>>)>,
 }
 
+/// The core coordinator of the Translator runtime, parameterized by its current bootstrap `State`.
+///
+/// It manages the lifecycle of essential sub-services and channels, ensuring resources
+/// are correctly initialized, passed to background executors, and cleanly torn down.
 pub(super) struct TranslatorRuntime<State> {
     tproxy_mode: TproxyMode,
     fallback_coordinator: FallbackCoordinator,
@@ -85,6 +94,10 @@ impl<State> TranslatorRuntime<State> {
         }
     }
 
+    /// Performs a coordinated, graceful shutdown of the runtime.
+    ///
+    /// Signals cancellation to all active sub-services and background tasks, awaiting
+    /// their clean termination up to a configured graceful timeout.
     pub async fn shutdown(self) {
         self.translator.cancellation_token.cancel();
 
@@ -183,6 +196,11 @@ impl TranslatorRuntime<Init> {
         })
     }
 
+    /// Drives the linear bootstrap sequence of the translator proxy, transitioning the runtime
+    /// from [`Init`] to the active [`Running`] state.
+    ///
+    /// If an intermediate phase fails, the caller receives the partially initialized
+    /// runtime and is responsible for shutting down any resources that were already started.
     pub async fn bootstrap(self) -> Result<TranslatorRuntime<Running>, BootstrapError> {
         let runtime = self.bootstrap_io();
         let runtime = runtime.bootstrap_sv1_server();
@@ -433,6 +451,8 @@ impl TranslatorRuntime<ChannelManagerReady> {
 }
 
 impl TranslatorRuntime<UpstreamReady> {
+    /// Activates the background execution loops of the [`ChannelManager`] and monitoring server,
+    /// transitioning the runtime to [`Running`].
     pub async fn start_services(self) -> TranslatorRuntime<Running> {
         info!("Launching ChannelManager tasks...");
         ChannelManager::run_channel_manager_tasks(

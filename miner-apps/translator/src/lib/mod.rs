@@ -60,10 +60,14 @@ impl TranslatorSv2 {
         }
     }
 
-    /// Starts the translator.
+    /// Starts the main event loop for the Translator Proxy.
     ///
-    /// This method starts the main event loop, which handles connections,
-    /// protocol translation, job management, and status reporting.
+    /// The startup and execution sequence follows:
+    /// 1. **Initialize:** Sets up the translator runtime state machine ([`TranslatorRuntime`]).
+    /// 2. **Bootstrap:** Configures internal channels, starts the SV1 server, initializes the Channel Manager,
+    ///    and establishes upstream SV2 connections.
+    /// 3. **Run & Loop:** Spawns active background loops/servers and handles fallbacks or graceful shutdown.
+    /// 4. **Teardown:** Performs a coordinated graceful cleanup of all services and tasks upon termination.
     pub async fn start(self) {
         info!("Starting Translator Proxy...");
 
